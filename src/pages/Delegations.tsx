@@ -52,7 +52,9 @@ export default function Delegations() {
             delegate: d.delegation.delegate,
             delegator: d.delegation.delegator,
             authority: d.delegation.authority,
-            caveats: d.delegation.caveats,
+            // The framework Caveat carries a runtime `args` field (empty for a
+            // subscription); it is excluded from the EIP-712 hash, so '0x' is safe.
+            caveats: d.delegation.caveats.map((c) => ({ enforcer: c.enforcer, terms: c.terms, args: '0x' as Hex })),
             salt: BigInt(d.delegation.salt),
             signature: d.delegation.signature,
           },

@@ -96,6 +96,7 @@ export const DelegationManagerABI = [
             components: [
               { name: 'enforcer', type: 'address' },
               { name: 'terms', type: 'bytes' },
+              { name: 'args', type: 'bytes' },
             ],
           },
           { name: 'salt', type: 'uint256' },
