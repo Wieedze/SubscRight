@@ -389,7 +389,7 @@ export default function CreateDelegation() {
                 <GaslessButton size="lg" onClick={handleSign} disabled={!canSign} className="w-full">
                   Pin & sign
                 </GaslessButton>
-                <p className="text-[11px] text-faint text-center">1 signature · 0 ETH · gas paid in USDC</p>
+                <p className="text-[11px] text-faint text-center">1 signature · </p>
               </>
             ) : (
               <div className="space-y-3 py-1">

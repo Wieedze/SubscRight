@@ -1,18 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPublicClient, http, isAddress, parseUnits, erc20Abi, type Address, type Hex, type PublicClient } from 'viem'
+import { useMemo, useRef, useState } from 'react'
+import { createPublicClient, http, isAddress, erc20Abi, type Address, type PublicClient, type WalletClient } from 'viem'
 import { baseSepolia, base, sepolia } from 'viem/chains'
+import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi'
 import { importDelegationsJson, type StoredDelegation } from '../lib/storage'
 import { ipfsToHttp } from '../lib/subscriptionTerms'
-import {
-  relayerUrlForChain,
-  getCapabilities,
-  chargeBundleViaRelayer,
-  pollRelayerUntilDone,
-  toRelayerJson,
-  type ChainCapabilities,
-} from '../lib/relayer1shot'
-import { Logo, Card, Btn, GaslessButton, StatusBadge, Payee, Mono } from '../ui/components'
-import { IconBolt, IconExt, IconAlert, IconLock, IconDoc, IconCube, IconArrowL } from '../ui/icons'
+import { redeemSubscriptionDirect } from '../lib/redeemDirect'
+import { Logo, Card, Btn, StatusBadge, Payee, Mono } from '../ui/components'
+import { IconCheck, IconExt, IconAlert, IconLock, IconDoc, IconCube, IconArrowL } from '../ui/icons'
 
 const CHAINS: { id: number; label: string; chain: typeof baseSepolia | typeof base | typeof sepolia }[] = [
   { id: 84532, label: 'Base Sepolia', chain: baseSepolia },
@@ -31,8 +25,6 @@ const tintFor = (addr: string) => {
 
 export default function StandaloneRedeem() {
   const [chainId, setChainId] = useState(84532)
-  const [caps, setCaps] = useState<ChainCapabilities | null>(null)
-  const [capsError, setCapsError] = useState<string | null>(null)
   const [jsonInput, setJsonInput] = useState('')
   const [sub, setSub] = useState<StoredDelegation | null>(null)
   const [recipient, setRecipient] = useState('')
@@ -42,19 +34,13 @@ export default function StandaloneRedeem() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const chain = useMemo(() => CHAINS.find((c) => c.id === chainId)!.chain, [chainId])
+  const { address, isConnected, chainId: walletChainId } = useAccount()
+  const { connect, connectors } = useConnect()
+  const { disconnect } = useDisconnect()
+  const { data: walletClient } = useWalletClient()
+  const injectedConnector = connectors.find((c) => c.id === 'injected') ?? connectors.find((c) => c.type === 'injected')
 
-  useEffect(() => {
-    let cancelled = false
-    setCaps(null)
-    setCapsError(null)
-    getCapabilities(relayerUrlForChain(chainId), chainId)
-      .then((c) => !cancelled && setCaps(c))
-      .catch((e: unknown) => !cancelled && setCapsError(e instanceof Error ? e.message : 'Relayer unavailable'))
-    return () => {
-      cancelled = true
-    }
-  }, [chainId])
+  const chain = useMemo(() => CHAINS.find((c) => c.id === chainId)!.chain, [chainId])
 
   function parse(text: string) {
     setError(null)
@@ -82,50 +68,46 @@ export default function StandaloneRedeem() {
     reader.readAsText(file)
   }
 
-  const eligible = !!caps && !!sub && sub.delegation.delegate.toLowerCase() === caps.targetAddress.toLowerCase()
+  // Only the delegate (the payee the subscriber signed for) can redeem this delegation.
+  const isDelegate = isConnected && !!sub && address?.toLowerCase() === sub.delegation.delegate.toLowerCase()
+  const wrongChain = isConnected && walletChainId !== chainId
+  const canRedeem = isDelegate && !wrongChain && !!walletClient && !charging
 
-  async function handleCharge() {
-    if (!sub || !caps) return
+  async function handleRedeem() {
+    if (!sub) return
+    if (!walletClient) return setError('Connect your wallet first.')
+    if (address?.toLowerCase() !== sub.delegation.delegate.toLowerCase())
+      return setError('Connected wallet must be the payee (delegate) of this subscription.')
+    if (walletChainId !== chainId) return setError(`Switch your wallet to ${CHAINS.find((c) => c.id === chainId)!.label}.`)
     if (!isAddress(recipient)) return setError('Enter a valid recipient address.')
     if (!amount || parseFloat(amount) <= 0) return setError('Enter an amount to charge.')
     setCharging(true)
     setError(null)
     try {
-      // Base/baseSepolia carry an OP-stack tx formatter whose client type isn't
-      // the generic PublicClient the relayer helper expects.
-      const client = createPublicClient({ chain, transport: http() }) as unknown as PublicClient
+      // Base/baseSepolia carry an OP-stack tx formatter whose client type isn't the
+      // generic PublicClient the SDK helper expects.
+      const publicClient = createPublicClient({ chain, transport: http() }) as unknown as PublicClient
       const tokenAddress = sub.meta.tokenAddress
       if (!tokenAddress) throw new Error('Subscription has no token address')
       let decimals = 6
       try {
-        decimals = await client.readContract({ address: tokenAddress, abi: erc20Abi, functionName: 'decimals' })
+        decimals = await publicClient.readContract({ address: tokenAddress, abi: erc20Abi, functionName: 'decimals' })
       } catch {
         // default USDC decimals
       }
-      const delegation = {
-        ...sub.delegation,
-        caveats: sub.delegation.caveats.map((c) => ({ ...c, args: '0x' as Hex })),
-      }
-      const taskId = await chargeBundleViaRelayer({
-        relayerUrl: relayerUrlForChain(chainId),
+      const hash = await redeemSubscriptionDirect({
+        // wagmi's wallet client is a viem WalletClient at runtime.
+        walletClient: walletClient as unknown as WalletClient,
+        publicClient,
         chainId,
-        capabilities: caps,
-        permissionContext: [toRelayerJson(delegation)],
+        delegation: sub.delegation,
         token: { address: tokenAddress, decimals },
-        workAmount: parseUnits(amount, decimals),
+        amount,
         recipient: recipient as Address,
-        client,
       })
-      const status = await pollRelayerUntilDone(relayerUrlForChain(chainId), taskId, { timeoutMs: 90_000 }).catch(
-        (e: unknown) => {
-          if (e instanceof Error && /Timeout/.test(e.message)) return null
-          throw e
-        },
-      )
-      if (status && (status.status === 400 || status.status === 500)) throw new Error(`Relayer rejected the charge: ${status.message ?? ''}`)
-      setTxHash(status?.receipt?.transactionHash ?? status?.hash ?? taskId)
+      setTxHash(hash)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Charge failed')
+      setError(err instanceof Error ? err.message : 'Redeem failed')
     } finally {
       setCharging(false)
     }
@@ -143,6 +125,20 @@ export default function StandaloneRedeem() {
             <select value={chainId} onChange={(e) => setChainId(Number(e.target.value))} className="h-9 text-sm" style={{ width: 'auto' }}>
               {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
+            {isConnected && address ? (
+              <button
+                onClick={() => disconnect()}
+                title="Disconnect"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl glass-soft ring-1 ring-line2 text-xs font-mono text-dim hover:text-ink transition"
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#34D399' }} />
+                {short(address)}
+              </button>
+            ) : (
+              <Btn kind="secondary" onClick={() => injectedConnector && connect({ connector: injectedConnector })} disabled={!injectedConnector}>
+                Connect wallet
+              </Btn>
+            )}
           </div>
         </div>
       </header>
@@ -152,13 +148,13 @@ export default function StandaloneRedeem() {
           <div className="max-w-xl mx-auto">
             <Card className="p-6 text-center">
               <div className="grid place-items-center w-12 h-12 rounded-2xl mx-auto" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px var(--accent-line)' }}>
-                <IconBolt size={24} />
+                <IconCheck size={24} />
               </div>
-              <h2 className="text-lg font-bold text-ink mt-4">Charged gasless</h2>
-              <p className="text-sm text-dim mt-1">{amount} USDC settled via the 1Shot relayer — no ETH spent.</p>
+              <h2 className="text-lg font-bold text-ink mt-4">Charged</h2>
+              <p className="text-sm text-dim mt-1">{amount} USDC redeemed on-chain — capped by the signed period limit.</p>
               <div className="mt-5 rounded-xl glass-soft ring-1 ring-line p-4 text-left">
                 <div className="flex items-center justify-between"><span className="text-xs text-faint">Recipient</span><Mono className="text-xs text-dim">{short(recipient)}</Mono></div>
-                <div className="flex items-center justify-between mt-2"><span className="text-xs text-faint">Reference</span><Mono className="text-xs text-dim">{short(txHash)}</Mono></div>
+                <div className="flex items-center justify-between mt-2"><span className="text-xs text-faint">Transaction</span><Mono className="text-xs text-dim">{short(txHash)}</Mono></div>
               </div>
               <div className="mt-5 flex items-center justify-center gap-2">
                 {txHash.startsWith('0x') && txHash.length === 66 && (
@@ -173,11 +169,7 @@ export default function StandaloneRedeem() {
         ) : !sub ? (
           <div className="max-w-xl mx-auto">
             <h1 className="text-2xl font-extrabold tracking-tight text-ink">Charge a subscription</h1>
-            <p className="text-dim text-sm mt-1">Load a signed subscription and bill this period — gasless, settled in USDC by the relayer.</p>
-
-            {capsError && (
-              <div className="mt-4 rounded-xl px-3 py-2 text-sm text-pending" style={{ background: 'rgba(251,191,36,.08)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.25)' }}>Relayer: {capsError}</div>
-            )}
+            <p className="text-dim text-sm mt-1">Load a signed subscription and bill this period. The payee redeems on-chain — gas in ETH, capped by the caveat.</p>
 
             <Card className="p-6 mt-5 space-y-5">
               <div
@@ -221,10 +213,22 @@ export default function StandaloneRedeem() {
                 <a href={httpUri} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-mono text-[color:var(--accent)] hover:underline"><IconCube size={12} /> {sub.meta.agreement!.cid.slice(0, 18)}… <IconExt size={10} className="opacity-60" /></a>
               )}
 
-              {!eligible && (
+              {!isConnected && (
                 <div className="mt-4 rounded-xl px-3 py-3 text-xs leading-relaxed" style={{ background: 'rgba(251,191,36,.08)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.25)', color: '#FBBF24' }}>
-                  <div className="flex items-center gap-1.5 font-semibold mb-1"><IconAlert size={13} /> Not gasless-eligible on {CHAINS.find((c) => c.id === chainId)!.label}</div>
-                  The subscription's payee (delegate) must be the 1Shot relayer address{caps ? ` (${short(caps.targetAddress)})` : ''}. This one delegates to {short(sub.delegation.delegate)}.
+                  <div className="flex items-center gap-1.5 font-semibold mb-1"><IconAlert size={13} /> Wallet not connected</div>
+                  Connect the payee wallet ({short(sub.delegation.delegate)}) to redeem this period on-chain.
+                </div>
+              )}
+              {isConnected && !isDelegate && (
+                <div className="mt-4 rounded-xl px-3 py-3 text-xs leading-relaxed" style={{ background: 'rgba(251,191,36,.08)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.25)', color: '#FBBF24' }}>
+                  <div className="flex items-center gap-1.5 font-semibold mb-1"><IconAlert size={13} /> Wrong wallet</div>
+                  Only the payee (delegate) can redeem. This subscription's payee is {short(sub.delegation.delegate)}; you are connected as {short(address!)}.
+                </div>
+              )}
+              {isDelegate && wrongChain && (
+                <div className="mt-4 rounded-xl px-3 py-3 text-xs leading-relaxed" style={{ background: 'rgba(251,191,36,.08)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.25)', color: '#FBBF24' }}>
+                  <div className="flex items-center gap-1.5 font-semibold mb-1"><IconAlert size={13} /> Wrong network</div>
+                  Switch your wallet to {CHAINS.find((c) => c.id === chainId)!.label} to redeem.
                 </div>
               )}
               {error && (
@@ -243,14 +247,14 @@ export default function StandaloneRedeem() {
                     <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={0} step="any" className="pr-16" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-faint">USDC</span>
                   </div>
-                  <p className="text-xs text-faint mt-1">Defaults to the period cap. The relayer's fee is taken in the token; capped on-chain.</p>
+                  <p className="text-xs text-faint mt-1">Defaults to the period cap. Capped on-chain by the caveat; you pay gas in ETH.</p>
                 </div>
               </div>
 
               <div className="mt-6 flex justify-center">
-                <GaslessButton onClick={handleCharge} disabled={!eligible || charging} intensity={eligible ? 1.5 : 0.5}>
-                  {charging ? 'Charging…' : 'Charge gasless'}
-                </GaslessButton>
+                <Btn onClick={handleRedeem} disabled={!canRedeem}>
+                  {charging ? 'Redeeming…' : 'Charge on-chain'}
+                </Btn>
               </div>
             </Card>
           </div>

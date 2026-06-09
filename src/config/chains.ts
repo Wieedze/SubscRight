@@ -1,7 +1,7 @@
 import { http, createConfig } from 'wagmi'
 import { type Chain } from 'viem'
 import { baseSepolia, base, sepolia, foundry } from 'wagmi/chains'
-import { safe } from 'wagmi/connectors'
+import { safe, injected } from 'wagmi/connectors'
 
 // Anvil local chain (Base Sepolia fork)
 export const anvilLocal: Chain = {
@@ -15,7 +15,9 @@ export const anvilLocal: Chain = {
 
 export const wagmiConfig = createConfig({
   chains: [baseSepolia, sepolia, base, anvilLocal],
-  connectors: [safe()],
+  // safe() auto-connects inside the Safe App iframe; injected() lets the biller
+  // (org EOA) connect MetaMask in the standalone redeem console.
+  connectors: [safe(), injected()],
   transports: {
     [baseSepolia.id]: http(),
     [sepolia.id]: http(),
