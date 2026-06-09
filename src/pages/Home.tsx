@@ -5,26 +5,82 @@ import { baseSepolia, base } from 'viem/chains'
 import { DeleGatorModuleFactoryABI, SafeABI } from '../config/abis'
 import { getAddresses } from '../config/addresses'
 import { buildModuleInstallTxs, DEFAULT_SALT } from '../lib/module'
+import { getDelegations, type StoredDelegation } from '../lib/storage'
+import { Card, Btn, StatusBadge, Payee, type Status } from '../ui/components'
+import { IconChip, IconCheck, IconPlus, IconRepeat, IconLock, IconCube, IconExt, IconAlert, IconArrowR } from '../ui/icons'
 
-const chains: Record<number, (typeof baseSepolia) | (typeof base)> = {
+const chains: Record<number, typeof baseSepolia | typeof base> = {
   84532: baseSepolia,
-  8453: base as any,
+  8453: base,
 }
 
-interface HomeProps {
-  onNavigate: (page: 'home' | 'create' | 'delegations' | 'import') => void
+type Page = 'home' | 'create' | 'delegations' | 'import' | 'redeem' | 'withdraw'
+
+function tintFor(addr: string): { tint: string; logo: string } {
+  const palette = ['#3B82F6', '#22D3EE', '#8B5CF6', '#34D399', '#FB7185', '#FBBF24']
+  let h = 0
+  for (let i = 2; i < addr.length; i++) h = (h * 31 + addr.charCodeAt(i)) >>> 0
+  return { tint: palette[h % palette.length], logo: addr.slice(2, 4).toUpperCase() }
+}
+function statusOf(s: StoredDelegation['meta']['status']): Status {
+  return s === 'signed' ? 'active' : s === 'revoked' ? 'revoked' : 'pending'
+}
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+
+function SubCard({ d, onOpen }: { d: StoredDelegation; onOpen: () => void }) {
+  const status = statusOf(d.meta.status)
+  const { tint, logo } = tintFor(d.delegation.delegate)
+  const dim = status === 'revoked'
+  return (
+    <Card hover onClick={onOpen} className={`p-5 cursor-pointer relative ${dim ? 'opacity-70' : ''}`}>
+      <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full" style={{ background: status === 'active' ? '#34D399' : status === 'pending' ? '#FBBF24' : '#FB7185' }} />
+      <div className="flex items-start justify-between gap-3">
+        <Payee logo={logo} tint={tint} name={d.meta.label} addr={short(d.delegation.delegate)} />
+        <StatusBadge status={status} size="sm" />
+      </div>
+      <div className="mt-5 flex items-end gap-2">
+        <span className="font-mono font-bold text-ink tnum leading-none" style={{ fontSize: 30 }}>{d.meta.amount ?? '—'}</span>
+        <span className="text-dim text-sm mb-0.5">{d.meta.tokenAddress ? 'USDC' : ''} / {d.meta.period ?? 'period'}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+        <div className="rounded-lg bg-raised/60 ring-1 ring-line px-3 py-2">
+          <div className="text-faint">Period</div>
+          <div className="text-ink font-semibold mt-0.5">{d.meta.period ?? '—'}</div>
+        </div>
+        <div className="rounded-lg bg-raised/60 ring-1 ring-line px-3 py-2">
+          <div className="text-faint flex items-center gap-1"><IconLock size={11} /> On-chain cap</div>
+          <div className="text-ink font-semibold mt-0.5 font-mono tnum">{d.meta.amount ?? '—'}</div>
+        </div>
+      </div>
+      {d.meta.agreement && (
+        <div className="mt-4 pt-4 border-t border-line">
+          <a
+            href={d.meta.agreement.uri.startsWith('ipfs://local-') ? undefined : `https://gateway.pinata.cloud/ipfs/${d.meta.agreement.cid}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1.5 text-xs font-mono text-dim hover:text-[color:var(--accent)] transition"
+          >
+            <IconCube size={13} /> {d.meta.agreement.cid.slice(0, 16)}… <IconExt size={11} className="opacity-60" />
+          </a>
+        </div>
+      )}
+    </Card>
+  )
 }
 
-export default function Home({ onNavigate }: HomeProps) {
+export default function Home({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const { sdk, safe } = useSafeAppsSDK()
   const [moduleStatus, setModuleStatus] = useState<'loading' | 'installed' | 'not-installed' | 'error'>('loading')
   const [moduleAddress, setModuleAddress] = useState<Address | null>(null)
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [safeInfo, setSafeInfo] = useState<{ owners: string[]; threshold: number } | null>(null)
+  const subs = getDelegations()
 
   useEffect(() => {
     checkModuleStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safe.safeAddress, safe.chainId])
 
   async function checkModuleStatus() {
@@ -36,56 +92,33 @@ export default function Home({ onNavigate }: HomeProps) {
         setModuleStatus('error')
         return
       }
-
       const client = createPublicClient({ chain, transport: http() })
       const addrs = getAddresses(safe.chainId)
-
-      // Predict module address
-      const predicted = await client.readContract({
+      const predicted = (await client.readContract({
         address: addrs.delegatorModuleFactory,
         abi: DeleGatorModuleFactoryABI,
         functionName: 'predictAddress',
         args: [safe.safeAddress as Address, DEFAULT_SALT],
-      }) as Address
-
+      })) as Address
       setModuleAddress(predicted)
-
-      // Check if module is enabled
       const isEnabled = await client.readContract({
         address: safe.safeAddress as Address,
         abi: SafeABI,
         functionName: 'isModuleEnabled',
         args: [predicted],
       })
-
-      // Get safe info
       try {
-        const owners = await client.readContract({
-          address: safe.safeAddress as Address,
-          abi: SafeABI,
-          functionName: 'getOwners',
-        }) as string[]
-        const threshold = await client.readContract({
-          address: safe.safeAddress as Address,
-          abi: SafeABI,
-          functionName: 'getThreshold',
-        }) as bigint
+        const owners = (await client.readContract({ address: safe.safeAddress as Address, abi: SafeABI, functionName: 'getOwners' })) as string[]
+        const threshold = (await client.readContract({ address: safe.safeAddress as Address, abi: SafeABI, functionName: 'getThreshold' })) as bigint
         setSafeInfo({ owners, threshold: Number(threshold) })
       } catch {
-        // Non-critical
+        // non-critical
       }
-
       setModuleStatus(isEnabled ? 'installed' : 'not-installed')
-    } catch (err: any) {
-      console.error('Module check failed:', err)
-      // If factory address is zero, show not-installed with a note
-      if (err.message?.includes('0x0000000000000000000000000000000000000000')) {
-        setError('Factory contract not yet deployed on this chain. Contract addresses need to be configured.')
-        setModuleStatus('error')
-      } else {
-        setError(err.message || 'Failed to check module status')
-        setModuleStatus('error')
-      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to check module status'
+      setError(msg)
+      setModuleStatus('error')
     }
   }
 
@@ -93,160 +126,104 @@ export default function Home({ onNavigate }: HomeProps) {
     if (!moduleAddress) return
     setInstalling(true)
     setError(null)
-
     try {
-      const txs = buildModuleInstallTxs(
-        safe.safeAddress as Address,
-        safe.chainId,
-        moduleAddress,
-      )
-
+      const txs = buildModuleInstallTxs(safe.safeAddress as Address, safe.chainId, moduleAddress)
       await sdk.txs.send({ txs })
-      // Transaction proposed — it'll need multisig approval
       setModuleStatus('installed')
-    } catch (err: any) {
-      setError(err.message || 'Failed to propose module installation')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to propose module installation')
     } finally {
       setInstalling(false)
     }
   }
 
+  const active = subs.filter((s) => s.meta.status === 'signed')
+  const committed = active.reduce((a, s) => a + (s.meta.period === 'month' ? parseFloat((s.meta.amount ?? '0').replace(/,/g, '')) : 0), 0)
+
   return (
-    <div className="space-y-6">
-      {/* Module Status Card */}
-      <div className="border border-white/10 rounded-xl p-6 bg-white/[0.02]">
-        <h2 className="text-lg font-semibold text-white mb-4">Gator Module Status</h2>
-
-        {moduleStatus === 'loading' && (
-          <div className="flex items-center gap-3 text-gray-400">
-            <div className="w-5 h-5 border-2 border-gray-600 border-t-amber-500 rounded-full animate-spin" />
-            Checking module status...
-          </div>
-        )}
-
-        {moduleStatus === 'installed' && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-green-500" />
-              <span className="text-green-400 font-medium">Module Active ✅</span>
+    <div className="rise">
+      {/* Module status banner */}
+      {moduleStatus === 'installed' ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl px-4 py-3 mb-6" style={{ background: 'rgba(52,211,153,.07)', boxShadow: 'inset 0 0 0 1px rgba(52,211,153,.22)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="grid place-items-center w-9 h-9 rounded-xl shrink-0" style={{ background: 'rgba(52,211,153,.14)', color: '#34D399' }}>
+              <IconChip size={18} />
             </div>
-            {moduleAddress && (
-              <p className="text-xs text-gray-500 font-mono">
-                Module: {moduleAddress}
-              </p>
-            )}
-            <button
-              onClick={() => onNavigate('create')}
-              className="bg-amber-500 hover:bg-amber-600 text-black font-semibold px-6 py-3 rounded-lg transition-colors"
-            >
-              Create Permission →
-            </button>
-          </div>
-        )}
-
-        {moduleStatus === 'not-installed' && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <span className="text-red-400 font-medium">Module Not Installed</span>
-            </div>
-            <p className="text-sm text-gray-400">
-              Your Safe doesn't have the Gator (ERC-7710) module enabled yet.
-              Install it to start creating delegated permissions.
-            </p>
-            {moduleAddress && (
-              <p className="text-xs text-gray-500 font-mono">
-                Predicted module address: {moduleAddress}
-              </p>
-            )}
-            <button
-              onClick={installModule}
-              disabled={installing}
-              className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold px-6 py-3 rounded-lg transition-colors"
-            >
-              {installing ? 'Proposing Transaction...' : 'Install Gator Module'}
-            </button>
-            <p className="text-xs text-gray-500">
-              This will propose a transaction to deploy and enable the DeleGator module.
-              All Safe signers will need to approve.
-            </p>
-          </div>
-        )}
-
-        {moduleStatus === 'error' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-yellow-500" />
-              <span className="text-yellow-400 font-medium">Configuration Needed</span>
-            </div>
-            {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                {error}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Safe Info Card */}
-      {safeInfo && (
-        <div className="border border-white/10 rounded-xl p-6 bg-white/[0.02]">
-          <h2 className="text-lg font-semibold text-white mb-4">Safe Details</h2>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Address</span>
-              <span className="text-gray-200 font-mono text-xs">
-                {safe.safeAddress}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Chain</span>
-              <span className="text-gray-200">
-                {safe.chainId === 84532 ? 'Base Sepolia' : safe.chainId === 8453 ? 'Base' : `Chain ${safe.chainId}`}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Threshold</span>
-              <span className="text-gray-200">
-                {safeInfo.threshold} of {safeInfo.owners.length}
-              </span>
-            </div>
-            <div className="text-sm">
-              <span className="text-gray-400">Owners</span>
-              <div className="mt-2 space-y-1">
-                {safeInfo.owners.map((owner) => (
-                  <p key={owner} className="text-xs text-gray-300 font-mono bg-white/5 rounded px-2 py-1">
-                    {owner}
-                  </p>
-                ))}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-ink flex items-center gap-2">
+                SubscRight module enabled
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-active"><IconCheck size={12} /> ready</span>
+              </div>
+              <div className="text-xs text-dim font-mono truncate">
+                Safe {short(safe.safeAddress)}{safeInfo ? ` · ${safeInfo.threshold}/${safeInfo.owners.length} signers` : ''}
               </div>
             </div>
           </div>
         </div>
+      ) : moduleStatus === 'not-installed' ? (
+        <Card className="p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="grid place-items-center w-9 h-9 rounded-xl shrink-0 bg-raised text-danger ring-1 ring-line"><IconAlert size={18} /></div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-ink">SubscRight module not installed</div>
+              <p className="text-xs text-dim mt-1 leading-relaxed">Enable the DeleGator (ERC-7710) module on your Safe to start creating gasless subscriptions. One-time setup — all signers approve.</p>
+              {moduleAddress && <p className="text-[11px] text-faint font-mono mt-2 truncate">module: {moduleAddress}</p>}
+              <div className="mt-3">
+                <Btn kind="primary" onClick={installModule} disabled={installing}>
+                  {installing ? 'Proposing…' : 'Install module'}
+                </Btn>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : moduleStatus === 'error' ? (
+        <Card className="p-4 mb-6">
+          <div className="flex items-center gap-2 text-pending text-sm font-medium"><IconAlert size={16} /> {error ?? 'Configuration needed'}</div>
+        </Card>
+      ) : (
+        <div className="text-dim text-sm mb-6 flex items-center gap-2">
+          <div className="w-4 h-4 border-2 border-line border-t-[color:var(--accent)] rounded-full animate-spin" /> Checking module…
+        </div>
       )}
 
-      {/* How It Works */}
-      <div className="border border-white/10 rounded-xl p-6 bg-white/[0.02]">
-        <h2 className="text-lg font-semibold text-white mb-4">How It Works</h2>
-        <div className="space-y-3 text-sm text-gray-400">
-          <div className="flex gap-3">
-            <span className="text-amber-500 font-bold">1.</span>
-            <span>Install the Gator module on your Safe (one-time setup)</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-amber-500 font-bold">2.</span>
-            <span>Create a delegation — define who can spend, how much, and how often</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-amber-500 font-bold">3.</span>
-            <span>Sign the delegation with your Safe's multisig</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-amber-500 font-bold">4.</span>
-            <span>Share the signed delegation with the delegate — they can redeem it within the limits</span>
-          </div>
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">Subscriptions</h1>
+          <p className="text-dim text-sm mt-1">Recurring USDC charges, gasless, capped on-chain.</p>
         </div>
+        <Btn kind="primary" icon={<IconPlus size={18} />} onClick={() => onNavigate('create')}>New subscription</Btn>
       </div>
+
+      {/* Stats (no ETH-spent stat by design choice) */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-xs text-faint"><IconRepeat size={16} /> Committed / month</div>
+          <div className="mt-2 font-mono font-bold text-ink tnum" style={{ fontSize: 24 }}>${committed.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+          <div className="text-xs text-dim mt-1">{active.length} active subscription{active.length === 1 ? '' : 's'}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-xs text-faint" style={{ color: 'var(--accent)' }}><IconCube size={16} /> Gasless</div>
+          <div className="mt-2 font-mono font-bold tnum" style={{ fontSize: 24, color: 'var(--accent)' }}>0 ETH</div>
+          <div className="text-xs text-dim mt-1">Charges paid in USDC by the relayer</div>
+        </Card>
+      </div>
+
+      {/* Subscriptions grid */}
+      {subs.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="text-dim text-sm">No subscriptions yet.</p>
+          <div className="mt-3 inline-flex">
+            <Btn kind="secondary" icon={<IconArrowR size={16} />} onClick={() => onNavigate('create')}>Create your first</Btn>
+          </div>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {subs.map((d) => (
+            <SubCard key={d.meta.delegationHash} d={d} onOpen={() => onNavigate('delegations')} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

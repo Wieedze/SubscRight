@@ -1,9 +1,9 @@
 {
-  "name": "Gator Delegations",
-  "description": "ERC-7710 delegation management for Safe multisigs. Create scoped, time-bound spending permissions with caveat enforcers.",
+  "name": "SubscRight",
+  "description": "Gasless recurring USDC subscriptions for Safe \u2014 one signature, charged per period via 1Shot, with the contract pinned to IPFS.",
   "iconPath": "logo.svg",
   "providedBy": {
-    "name": "Osobot",
-    "url": "https://github.com/osobot-ai/gator-safe-app"
+    "name": "SubscRight",
+    "url": "https://github.com/Wieedze/gator-safe-app"
   }
 }
