@@ -4,6 +4,19 @@ import { encodeFunctionData } from 'viem'
 import { getDelegations, updateDelegationStatus, removeDelegation, type StoredDelegation } from '../lib/storage'
 import { DelegationManagerABI } from '../config/abis'
 import { getAddresses } from '../config/addresses'
+import { ipfsToHttp } from '../lib/subscriptionTerms'
+import { Card, Btn, StatusBadge, Payee, Mono, CopyChip, type Status } from '../ui/components'
+import { IconCube, IconExt, IconLock, IconStop, IconReceipt, IconX, IconCal } from '../ui/icons'
+
+const chainName = (id: number) => (id === 84532 ? 'Base Sepolia' : id === 8453 ? 'Base' : `Chain ${id}`)
+const statusOf = (s: StoredDelegation['meta']['status']): Status => (s === 'signed' ? 'active' : s === 'revoked' ? 'revoked' : 'pending')
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+const tintFor = (addr: string) => {
+  const palette = ['#3B82F6', '#22D3EE', '#8B5CF6', '#34D399', '#FB7185', '#FBBF24']
+  let h = 0
+  for (let i = 2; i < addr.length; i++) h = (h * 31 + addr.charCodeAt(i)) >>> 0
+  return palette[h % palette.length]
+}
 
 export default function Delegations() {
   const { sdk, safe } = useSafeAppsSDK()
@@ -12,13 +25,11 @@ export default function Delegations() {
 
   useEffect(() => {
     loadDelegations()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function loadDelegations() {
-    const all = getDelegations().filter(
-      (d) => d.meta.safeAddress.toLowerCase() === safe.safeAddress.toLowerCase()
-    )
-    setDelegations(all)
+    setDelegations(getDelegations().filter((d) => d.meta.safeAddress.toLowerCase() === safe.safeAddress.toLowerCase()))
   }
 
   async function handleRevoke(d: StoredDelegation) {
@@ -45,161 +56,98 @@ export default function Delegations() {
           }),
         },
       ]
-
       await sdk.txs.send({ txs })
       updateDelegationStatus(d.meta.delegationHash, 'revoked')
       loadDelegations()
-    } catch (err: any) {
+    } catch (err) {
       console.error('Revoke failed:', err)
     } finally {
       setRevoking(null)
     }
   }
 
-  const [copied, setCopied] = useState<string | null>(null)
-
-  async function copyDelegation(d: StoredDelegation) {
-    const text = JSON.stringify(d, null, 2)
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // Fallback for iframe/non-secure contexts
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-    setCopied(d.meta.delegationHash)
-    setTimeout(() => setCopied(null), 2000)
-  }
-
   if (delegations.length === 0) {
     return (
-      <div className="border border-white/10 rounded-xl p-8 bg-white/[0.02] text-center">
-        <div className="text-4xl mb-4">📋</div>
-        <h2 className="text-lg font-semibold text-white mb-2">No Delegations Yet</h2>
-        <p className="text-sm text-gray-400">
-          Create a delegation to get started. Delegations will appear here.
-        </p>
+      <div className="rise">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink mb-6">Subscriptions</h1>
+        <Card className="p-10 text-center">
+          <div className="grid place-items-center w-12 h-12 rounded-2xl bg-raised ring-1 ring-line mx-auto text-faint"><IconReceipt size={22} /></div>
+          <h2 className="text-base font-semibold text-ink mt-4">No subscriptions yet</h2>
+          <p className="text-sm text-dim mt-1 max-w-sm mx-auto">Signed subscriptions for this Safe appear here, with their on-chain cap and IPFS contract.</p>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-white">
-        Active Delegations ({delegations.length})
-      </h2>
-
-      {delegations.map((d) => (
-        <div
-          key={d.meta.delegationHash}
-          className="border border-white/10 rounded-xl p-5 bg-white/[0.02] space-y-3"
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    d.meta.status === 'signed'
-                      ? 'bg-green-500'
-                      : d.meta.status === 'revoked'
-                      ? 'bg-red-500'
-                      : 'bg-yellow-500'
-                  }`}
-                />
-                <span className="text-sm font-medium text-white">{d.meta.label}</span>
-              </div>
-              <p className="text-xs text-gray-500 font-mono">
-                → {d.delegation.delegate}
-              </p>
-              {d.meta.agreement && (
-                <p className="text-xs text-gray-500">
-                  contract:{' '}
-                  {d.meta.agreement.uri.startsWith('ipfs://local-') ? (
-                    <span title={d.meta.agreement.termsHash}>offline ({d.meta.agreement.cid})</span>
-                  ) : (
-                    <a
-                      href={`https://gateway.pinata.cloud/ipfs/${d.meta.agreement.cid}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={`terms hash ${d.meta.agreement.termsHash}`}
-                      className="text-emerald-400 hover:underline break-all"
-                    >
-                      {d.meta.agreement.uri}
-                    </a>
-                  )}
-                </p>
-              )}
-            </div>
-            <span
-              className={`text-xs px-2 py-1 rounded ${
-                d.meta.status === 'signed'
-                  ? 'bg-green-500/10 text-green-400'
-                  : d.meta.status === 'revoked'
-                  ? 'bg-red-500/10 text-red-400'
-                  : 'bg-yellow-500/10 text-yellow-400'
-              }`}
-            >
-              {d.meta.status}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <span className="text-gray-500">Type: </span>
-              <span className="text-gray-300">
-                {d.meta.scopeType === 'ethSpendingLimit' ? 'ETH' : 'ERC-20'}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Chain: </span>
-              <span className="text-gray-300">
-                {d.meta.chainId === 84532 ? 'Base Sepolia' : d.meta.chainId === 8453 ? 'Base' : d.meta.chainId}
-              </span>
-            </div>
-            {d.meta.expiryDate && (
-              <div className="col-span-2">
-                <span className="text-gray-500">Expires: </span>
-                <span className="text-gray-300">{new Date(d.meta.expiryDate).toLocaleString()}</span>
-              </div>
-            )}
-            <div className="col-span-2">
-              <span className="text-gray-500">Created: </span>
-              <span className="text-gray-300">{new Date(d.meta.createdAt).toLocaleString()}</span>
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => copyDelegation(d)}
-              className="text-xs bg-white/5 hover:bg-white/10 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              {copied === d.meta.delegationHash ? '✅ Copied!' : '📋 Copy'}
-            </button>
-            {d.meta.status === 'signed' && (
-              <button
-                onClick={() => handleRevoke(d)}
-                disabled={revoking === d.meta.delegationHash}
-                className="text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {revoking === d.meta.delegationHash ? 'Revoking...' : '🗑 Revoke'}
-              </button>
-            )}
-            <button
-              onClick={() => removeDelegation(d.meta.delegationHash)}
-              className="text-xs bg-white/5 hover:bg-white/10 text-gray-500 px-3 py-1.5 rounded-lg transition-colors ml-auto"
-              title="Remove from local storage"
-            >
-              ✕
-            </button>
-          </div>
+    <div className="rise">
+      <div className="flex items-end justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">Subscriptions</h1>
+          <p className="text-dim text-sm mt-1">{delegations.length} on {chainName(safe.chainId)}</p>
         </div>
-      ))}
+      </div>
+
+      <div className="space-y-3">
+        {delegations.map((d) => {
+          const status = statusOf(d.meta.status)
+          const httpUri = d.meta.agreement && !d.meta.agreement.uri.startsWith('ipfs://local-') ? ipfsToHttp(d.meta.agreement.uri) : undefined
+          const isBusy = revoking === d.meta.delegationHash
+          return (
+            <Card key={d.meta.delegationHash} className={`p-5 relative ${status === 'revoked' ? 'opacity-70' : ''}`}>
+              <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full" style={{ background: status === 'active' ? '#34D399' : status === 'pending' ? '#FBBF24' : '#FB7185' }} />
+              <div className="flex items-start justify-between gap-4">
+                <Payee logo={d.delegation.delegate.slice(2, 4).toUpperCase()} tint={tintFor(d.delegation.delegate)} name={d.meta.label} addr={short(d.delegation.delegate)} />
+                <div className="flex items-center gap-3 shrink-0">
+                  {d.meta.amount && (
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-ink tnum leading-none">{d.meta.amount} <span className="text-dim text-xs font-semibold">{d.meta.tokenAddress ? 'USDC' : 'ETH'}</span></div>
+                      <div className="text-[11px] text-faint mt-1">/ {d.meta.period ?? 'period'}</div>
+                    </div>
+                  )}
+                  <StatusBadge status={status} size="sm" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-dim">
+                <span className="inline-flex items-center gap-1.5"><IconLock size={12} className="text-faint" /> Cap {d.meta.amount ?? '—'} {d.meta.tokenAddress ? 'USDC' : ''} / {d.meta.period ?? 'period'}</span>
+                {d.meta.expiryDate && <span className="inline-flex items-center gap-1.5"><IconCal size={12} className="text-faint" /> Ends {new Date(d.meta.expiryDate).toLocaleDateString()}</span>}
+                <span className="text-faint">Created {new Date(d.meta.createdAt).toLocaleDateString()}</span>
+                {d.meta.agreement && (
+                  httpUri ? (
+                    <a href={httpUri} target="_blank" rel="noreferrer" title={d.meta.agreement.termsHash} className="inline-flex items-center gap-1.5 font-mono text-[color:var(--accent)] hover:underline">
+                      <IconCube size={12} /> {d.meta.agreement.cid.slice(0, 14)}… <IconExt size={10} className="opacity-60" />
+                    </a>
+                  ) : (
+                    <span title={d.meta.agreement.termsHash} className="inline-flex items-center gap-1.5 font-mono text-faint"><IconCube size={12} /> offline contract</span>
+                  )
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-line flex items-center gap-2">
+                <Mono className="text-[11px] text-faint mr-auto">{short(d.meta.delegationHash)}</Mono>
+                <CopyChip value={JSON.stringify(d, null, 2)} label="Copy JSON" />
+                {d.meta.status === 'signed' && (
+                  <Btn kind="danger" size="sm" icon={<IconStop size={14} />} onClick={() => handleRevoke(d)} disabled={isBusy}>
+                    {isBusy ? 'Revoking…' : 'Revoke'}
+                  </Btn>
+                )}
+                <button
+                  onClick={() => {
+                    removeDelegation(d.meta.delegationHash)
+                    loadDelegations()
+                  }}
+                  aria-label="Remove from local storage"
+                  title="Remove from local storage"
+                  className="grid place-items-center w-9 h-9 rounded-xl text-faint hover:text-ink hover:bg-raised transition"
+                >
+                  <IconX size={15} />
+                </button>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

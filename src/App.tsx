@@ -4,7 +4,7 @@ import Home from './pages/Home'
 import CreateDelegation from './pages/CreateDelegation'
 import Delegations from './pages/Delegations'
 import ImportDelegation from './pages/ImportDelegation'
-import RedeemDelegation from './pages/RedeemDelegation'
+import Charge from './pages/Charge'
 import ModuleTransfer from './pages/ModuleTransfer'
 import { Logo } from './ui/components'
 import { IconGrid, IconReceipt, IconPlus, IconBolt, IconWallet, IconLink } from './ui/icons'
@@ -80,7 +80,7 @@ function AppInner() {
           {page === 'create' && <CreateDelegation />}
           {page === 'delegations' && <Delegations />}
           {page === 'import' && <ImportDelegation />}
-          {page === 'redeem' && <RedeemDelegation />}
+          {page === 'redeem' && <Charge />}
           {page === 'withdraw' && <ModuleTransfer />}
         </main>
       </div>
