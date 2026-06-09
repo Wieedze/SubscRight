@@ -1,5 +1,9 @@
 import { useState, useRef } from 'react'
 import { importDelegationsJson, saveDelegation, type StoredDelegation } from '../lib/storage'
+import { Card, Btn, Mono } from '../ui/components'
+import { IconLink, IconCheck, IconDoc, IconAlert } from '../ui/icons'
+
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 export default function ImportDelegation() {
   const [jsonInput, setJsonInput] = useState('')
@@ -14,15 +18,10 @@ export default function ImportDelegation() {
     setImported(null)
     setSaved(false)
     try {
-      const delegations = importDelegationsJson(text)
-      setImported(delegations)
-    } catch (err: any) {
-      setError(err.message || 'Failed to parse delegation JSON')
+      setImported(importDelegationsJson(text))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to parse delegation JSON')
     }
-  }
-
-  function handlePaste() {
-    parseInput(jsonInput)
   }
 
   function handleFile(file: File) {
@@ -49,104 +48,58 @@ export default function ImportDelegation() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="border border-white/10 rounded-xl p-6 bg-white/[0.02] space-y-4">
-        <h2 className="text-lg font-semibold text-white">Import Delegation</h2>
-        <p className="text-sm text-gray-400">
-          Paste a delegation JSON or upload a file to import it.
-        </p>
+    <div className="rise max-w-xl">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Import</h1>
+      <p className="text-dim text-sm mt-1">Load a signed subscription JSON shared with you, to charge or track it.</p>
 
-        {/* Drop zone */}
+      <Card className="p-6 mt-5 space-y-5">
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            dragOver
-              ? 'border-amber-500 bg-amber-500/5'
-              : 'border-white/10 hover:border-white/20'
-          }`}
+          className="rounded-2xl p-8 text-center cursor-pointer transition-colors"
+          style={{ boxShadow: `inset 0 0 0 1.5px ${dragOver ? 'var(--accent-line)' : 'var(--color-line)'}`, background: dragOver ? 'var(--accent-soft)' : 'transparent' }}
         >
-          <div className="text-3xl mb-2">📁</div>
-          <p className="text-sm text-gray-400">
-            Drop a JSON file here or <span className="text-amber-400">click to browse</span>
-          </p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleFile(file)
-            }}
-          />
+          <div className="grid place-items-center w-11 h-11 rounded-2xl bg-raised ring-1 ring-line mx-auto text-faint"><IconDoc size={20} /></div>
+          <p className="text-sm text-dim mt-3">Drop a JSON file or <span style={{ color: 'var(--accent)' }}>click to browse</span></p>
+          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
         </div>
 
-        {/* Text input */}
         <div>
-          <label className="text-sm text-gray-400 block mb-1">Or paste JSON:</label>
-          <textarea
-            value={jsonInput}
-            onChange={(e) => setJsonInput(e.target.value)}
-            rows={8}
-            placeholder='{"delegation": {...}, "meta": {...}}'
-            className="font-mono text-xs"
-          />
-          <button
-            onClick={handlePaste}
-            disabled={!jsonInput.trim()}
-            className="mt-2 bg-white/10 hover:bg-white/15 disabled:opacity-30 text-white px-4 py-2 rounded-lg text-sm transition-colors"
-          >
-            Parse JSON
-          </button>
+          <label className="text-sm font-medium text-ink block mb-1.5">Or paste JSON</label>
+          <textarea value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} rows={7} placeholder='{"delegation": {…}, "meta": {…}}' className="font-mono text-xs" />
+          <div className="mt-2">
+            <Btn kind="secondary" icon={<IconLink size={16} />} onClick={() => parseInput(jsonInput)} disabled={!jsonInput.trim()}>Parse JSON</Btn>
+          </div>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400">
-            {error}
+          <div className="rounded-xl px-3 py-2 text-sm text-danger flex items-center gap-2" style={{ background: 'rgba(251,113,133,.10)', boxShadow: 'inset 0 0 0 1px rgba(251,113,133,.30)' }}>
+            <IconAlert size={15} /> {error}
           </div>
         )}
 
-        {/* Preview */}
         {imported && (
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-white">
-              Found {imported.length} delegation{imported.length !== 1 ? 's' : ''}
-            </h3>
+            <h3 className="text-sm font-semibold text-ink">Found {imported.length} subscription{imported.length !== 1 ? 's' : ''}</h3>
             {imported.map((d, i) => (
-              <div key={i} className="bg-black/30 rounded-lg p-3 text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Delegate</span>
-                  <span className="text-gray-300 font-mono">{d.delegation.delegate}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Label</span>
-                  <span className="text-gray-300">{d.meta.label}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Status</span>
-                  <span className="text-gray-300">{d.meta.status}</span>
-                </div>
+              <div key={i} className="rounded-xl bg-raised ring-1 ring-line p-3 text-xs space-y-1.5">
+                <div className="flex justify-between gap-3"><span className="text-faint">Label</span><span className="text-ink truncate">{d.meta.label}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-faint">Delegate</span><Mono className="text-dim">{short(d.delegation.delegate)}</Mono></div>
+                <div className="flex justify-between gap-3"><span className="text-faint">Status</span><span className="text-dim">{d.meta.status}</span></div>
               </div>
             ))}
-
             {saved ? (
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm text-green-400">
-                ✅ Saved to local storage
+              <div className="rounded-xl px-3 py-2 text-sm flex items-center gap-2" style={{ background: 'rgba(52,211,153,.08)', boxShadow: 'inset 0 0 0 1px rgba(52,211,153,.22)', color: '#34D399' }}>
+                <IconCheck size={15} /> Saved locally
               </div>
             ) : (
-              <button
-                onClick={handleSave}
-                className="bg-amber-500 hover:bg-amber-600 text-black font-semibold px-6 py-2 rounded-lg transition-colors text-sm"
-              >
-                Save to Local Storage
-              </button>
+              <Btn kind="primary" onClick={handleSave}>Save subscription{imported.length !== 1 ? 's' : ''}</Btn>
             )}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

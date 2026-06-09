@@ -16,12 +16,13 @@ import { base, baseSepolia } from 'viem/chains'
 import { DeleGatorModuleFactoryABI } from '../config/abis'
 import { getAddresses } from '../config/addresses'
 import { DEFAULT_SALT } from '../lib/module'
+import { Card, Btn, Mono, CopyChip } from '../ui/components'
+import { IconWallet, IconCheck, IconAlert, IconRepeat } from '../ui/icons'
 
-// Known tokens to check balances for
-const KNOWN_TOKENS: { address: Address; symbol: string; decimals: number; icon: string }[] = [
-  { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC', decimals: 6, icon: '💵' },
-  { address: '0xc78fAbC2cB5B9cf59E0Af3Da8E3Bc46d47753A4e', symbol: 'OSO', decimals: 18, icon: '🐻' },
-  { address: '0x4200000000000000000000000000000000000006', symbol: 'WETH', decimals: 18, icon: '💎' },
+const KNOWN_TOKENS: { address: Address; symbol: string; decimals: number }[] = [
+  { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC', decimals: 6 },
+  { address: '0xc78fAbC2cB5B9cf59E0Af3Da8E3Bc46d47753A4e', symbol: 'OSO', decimals: 18 },
+  { address: '0x4200000000000000000000000000000000000006', symbol: 'WETH', decimals: 18 },
 ]
 
 const ERC20_ABI = parseAbi([
@@ -29,25 +30,16 @@ const ERC20_ABI = parseAbi([
   'function transfer(address, uint256) returns (bool)',
 ])
 
-// ModeCode encoding for ERC-7579 execute
-// CallType.Single = 0x00, ExecType.Default = 0x00, rest padding
 const SINGLE_DEFAULT_MODE: Hex = pad('0x00', { size: 32 })
+const MODULE_EXECUTE_ABI = parseAbi(['function execute(bytes32 mode, bytes calldata executionCalldata) payable'])
 
-// DelegatorSafeModule execute ABI
-const MODULE_EXECUTE_ABI = parseAbi([
-  'function execute(bytes32 mode, bytes calldata executionCalldata) payable',
-])
-
-const chains: Record<number, typeof baseSepolia | typeof base> = {
-  84532: baseSepolia,
-  8453: base as any,
-}
+const chains: Record<number, typeof baseSepolia | typeof base> = { 84532: baseSepolia, 8453: base }
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 interface TokenBalance {
   symbol: string
   address: Address | 'native'
   decimals: number
-  icon: string
   balance: bigint
   formatted: string
 }
@@ -66,29 +58,20 @@ export default function ModuleTransfer() {
   const chainId = safe.chainId
   const chain = chains[chainId]
 
-  const getClient = useCallback(() => {
-    if (!chain) return null
-    return createPublicClient({
-      chain,
-      transport: http(),
-    })
-  }, [chain])
+  const getClient = useCallback(() => (chain ? createPublicClient({ chain, transport: http() }) : null), [chain])
 
-  // Predict module address
   useEffect(() => {
     async function predictModule() {
       const client = getClient()
       if (!client) return
-
       try {
         const addrs = getAddresses(chainId)
-        const predicted = await client.readContract({
+        const predicted = (await client.readContract({
           address: addrs.delegatorModuleFactory,
           abi: DeleGatorModuleFactoryABI,
           functionName: 'predictAddress',
           args: [safe.safeAddress as Address, DEFAULT_SALT],
-        }) as Address
-
+        })) as Address
         setModuleAddress(predicted)
       } catch (err) {
         console.error('Failed to predict module address:', err)
@@ -97,59 +80,31 @@ export default function ModuleTransfer() {
         setLoading(false)
       }
     }
-
     predictModule()
   }, [chainId, safe.safeAddress, getClient])
 
-  // Fetch balances
   const fetchBalances = useCallback(async () => {
     const client = getClient()
     if (!client || !moduleAddress) return
-
     setRefreshing(true)
     try {
       const results: TokenBalance[] = []
-
-      // ETH balance
       const ethBalance = await client.getBalance({ address: moduleAddress })
       if (ethBalance > 0n) {
-        results.push({
-          symbol: 'ETH',
-          address: 'native',
-          decimals: 18,
-          icon: 'Ξ',
-          balance: ethBalance,
-          formatted: formatEther(ethBalance),
-        })
+        results.push({ symbol: 'ETH', address: 'native', decimals: 18, balance: ethBalance, formatted: formatEther(ethBalance) })
       }
-
-      // ERC-20 balances
       for (const token of KNOWN_TOKENS) {
         try {
-          const balance = await client.readContract({
-            address: token.address,
-            abi: ERC20_ABI,
-            functionName: 'balanceOf',
-            args: [moduleAddress],
-          })
+          const balance = await client.readContract({ address: token.address, abi: ERC20_ABI, functionName: 'balanceOf', args: [moduleAddress] })
           if (balance > 0n) {
-            results.push({
-              symbol: token.symbol,
-              address: token.address,
-              decimals: token.decimals,
-              icon: token.icon,
-              balance,
-              formatted: formatUnits(balance, token.decimals),
-            })
+            results.push({ symbol: token.symbol, address: token.address, decimals: token.decimals, balance, formatted: formatUnits(balance, token.decimals) })
           }
         } catch {
-          // Token might not exist on this chain
+          // token may not exist on this chain
         }
       }
-
       setBalances(results)
-      // Auto-select all assets with balance
-      setSelectedAssets(new Set(results.map(b => b.address)))
+      setSelectedAssets(new Set(results.map((b) => b.address)))
     } catch (err) {
       console.error('Failed to fetch balances:', err)
       setError('Failed to fetch module balances')
@@ -159,80 +114,43 @@ export default function ModuleTransfer() {
   }, [getClient, moduleAddress])
 
   useEffect(() => {
-    if (moduleAddress) {
-      fetchBalances()
-    }
+    if (moduleAddress) fetchBalances()
   }, [moduleAddress, fetchBalances])
 
-  // Toggle asset selection
   function toggleAsset(address: string) {
-    setSelectedAssets(prev => {
+    setSelectedAssets((prev) => {
       const next = new Set(prev)
-      if (next.has(address)) {
-        next.delete(address)
-      } else {
-        next.add(address)
-      }
+      if (next.has(address)) next.delete(address)
+      else next.add(address)
       return next
     })
   }
 
-  // Build the Safe transaction to call module.execute() for each selected asset
   async function handleTransfer() {
     if (!moduleAddress || selectedAssets.size === 0) return
-
     setSending(true)
     setError('')
     setTxHash('')
-
     try {
       const safeAddr = safe.safeAddress as Address
       const txs: { to: string; value: string; data: string }[] = []
-
       for (const asset of balances) {
         if (!selectedAssets.has(asset.address)) continue
-
         let executionCalldata: Hex
-
         if (asset.address === 'native') {
-          // Single execution: transfer ETH to Safe
-          // encodeSingle = abi.encodePacked(target, value, calldata)
-          executionCalldata = encodePacked(
-            ['address', 'uint256', 'bytes'],
-            [safeAddr, asset.balance, '0x']
-          )
+          executionCalldata = encodePacked(['address', 'uint256', 'bytes'], [safeAddr, asset.balance, '0x'])
         } else {
-          // Single execution: call ERC20.transfer(safe, balance)
-          const transferData = encodeFunctionData({
-            abi: ERC20_ABI,
-            functionName: 'transfer',
-            args: [safeAddr, asset.balance],
-          })
-          executionCalldata = encodePacked(
-            ['address', 'uint256', 'bytes'],
-            [asset.address, 0n, transferData]
-          )
+          const transferData = encodeFunctionData({ abi: ERC20_ABI, functionName: 'transfer', args: [safeAddr, asset.balance] })
+          executionCalldata = encodePacked(['address', 'uint256', 'bytes'], [asset.address, 0n, transferData])
         }
-
-        // Build the Safe tx that calls module.execute(mode, executionCalldata)
-        const executeData = encodeFunctionData({
-          abi: MODULE_EXECUTE_ABI,
-          functionName: 'execute',
-          args: [SINGLE_DEFAULT_MODE, executionCalldata],
-        })
-
-        txs.push({
-          to: moduleAddress,
-          value: '0',
-          data: executeData,
-        })
+        const executeData = encodeFunctionData({ abi: MODULE_EXECUTE_ABI, functionName: 'execute', args: [SINGLE_DEFAULT_MODE, executionCalldata] })
+        txs.push({ to: moduleAddress, value: '0', data: executeData })
       }
-
       const result = await sdk.txs.send({ txs })
       setTxHash(result.safeTxHash)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Transfer failed:', err)
-      setError(err?.message || 'Transfer failed')
+      setError(err instanceof Error ? err.message : 'Transfer failed')
     } finally {
       setSending(false)
     }
@@ -240,133 +158,93 @@ export default function ModuleTransfer() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
+      <div className="rise flex items-center justify-center py-24">
+        <div className="w-7 h-7 border-2 border-line border-t-[color:var(--accent)] rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-2">📦 Module Withdraw</h2>
-        <p className="text-sm text-gray-400">
-          Transfer assets from your Delegator Safe Module back to your Safe. When swap intents are executed, 
-          the output tokens are sent to the module (the root delegator). Use this to withdraw them.
-        </p>
-      </div>
+    <div className="rise max-w-xl">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Withdraw</h1>
+      <p className="text-dim text-sm mt-1">Move assets held by your Delegator module back into the Safe.</p>
 
-      {/* Module Address */}
-      <div className="border border-white/10 rounded-xl p-4 bg-white/[0.02]">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Delegator Safe Module</p>
-            <p className="text-sm text-gray-300 font-mono">
-              {moduleAddress || 'Not deployed'}
-            </p>
+      <Card className="p-4 mt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-faint mb-1">Delegator module</p>
+            {moduleAddress ? <CopyChip value={moduleAddress} label={short(moduleAddress)} /> : <span className="text-sm text-dim">Not deployed</span>}
           </div>
-          <button
-            onClick={fetchBalances}
-            disabled={refreshing || !moduleAddress}
-            className="text-sm text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors"
-          >
-            {refreshing ? '⟳ Loading...' : '⟳ Refresh'}
+          <button onClick={fetchBalances} disabled={refreshing || !moduleAddress} className="inline-flex items-center gap-1.5 text-sm text-dim hover:text-ink disabled:opacity-50 transition">
+            <IconRepeat size={15} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Loading' : 'Refresh'}
           </button>
         </div>
-      </div>
+      </Card>
 
-      {/* Balances */}
       {balances.length === 0 ? (
-        <div className="border border-white/10 rounded-xl p-8 bg-white/[0.02] text-center">
-          <p className="text-gray-500 text-sm">
-            {refreshing ? 'Fetching balances...' : 'No assets found in the module.'}
-          </p>
-        </div>
+        <Card className="p-10 text-center mt-4">
+          <div className="grid place-items-center w-12 h-12 rounded-2xl bg-raised ring-1 ring-line mx-auto text-faint"><IconWallet size={22} /></div>
+          <p className="text-sm text-dim mt-3">{refreshing ? 'Fetching balances…' : 'No assets in the module.'}</p>
+        </Card>
       ) : (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-300">Module Assets</h3>
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-ink">Module assets</h3>
             <button
-              onClick={() => {
-                if (selectedAssets.size === balances.length) {
-                  setSelectedAssets(new Set())
-                } else {
-                  setSelectedAssets(new Set(balances.map(b => b.address)))
-                }
-              }}
-              className="text-xs text-amber-400 hover:text-amber-300"
+              onClick={() => setSelectedAssets(selectedAssets.size === balances.length ? new Set() : new Set(balances.map((b) => b.address)))}
+              className="text-xs text-dim hover:text-ink transition"
             >
-              {selectedAssets.size === balances.length ? 'Deselect All' : 'Select All'}
+              {selectedAssets.size === balances.length ? 'Deselect all' : 'Select all'}
             </button>
           </div>
-
-          {balances.map(asset => (
-            <button
-              key={asset.address}
-              onClick={() => toggleAsset(asset.address)}
-              className={`w-full flex items-center justify-between p-4 rounded-lg border transition-colors ${
-                selectedAssets.has(asset.address)
-                  ? 'border-amber-500/50 bg-amber-500/10'
-                  : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{asset.icon}</span>
-                <div className="text-left">
-                  <p className="text-sm font-medium text-white">{asset.symbol}</p>
-                  {asset.address !== 'native' && (
-                    <p className="text-xs text-gray-500 font-mono">
-                      {(asset.address as string).slice(0, 6)}...{(asset.address as string).slice(-4)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-white">{Number(asset.formatted).toFixed(6)}</p>
-                <p className="text-xs text-gray-500">
-                  {selectedAssets.has(asset.address) ? '✓ Selected' : 'Click to select'}
-                </p>
-              </div>
-            </button>
-          ))}
+          <div className="space-y-2">
+            {balances.map((asset) => {
+              const on = selectedAssets.has(asset.address)
+              return (
+                <button
+                  key={asset.address}
+                  onClick={() => toggleAsset(asset.address)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl transition ${on ? 'bg-raised ring-1 ring-line2' : 'bg-panel ring-1 ring-line hover:ring-line2'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="grid place-items-center w-9 h-9 rounded-xl font-bold text-xs shrink-0" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', boxShadow: 'inset 0 0 0 1px var(--accent-line)' }}>
+                      {asset.symbol.slice(0, 3)}
+                    </span>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-ink">{asset.symbol}</p>
+                      {asset.address !== 'native' && <Mono className="text-xs text-faint">{short(asset.address as string)}</Mono>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-ink tnum text-sm">{Number(asset.formatted).toFixed(6)}</span>
+                    <span className={`grid place-items-center w-5 h-5 rounded-md ${on ? 'text-[color:var(--accent)]' : 'text-faint'}`} style={on ? { boxShadow: 'inset 0 0 0 1px var(--accent-line)' } : { boxShadow: 'inset 0 0 0 1px var(--color-line)' }}>
+                      {on && <IconCheck size={13} />}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
-      {/* Transfer Info */}
-      {selectedAssets.size > 0 && (
-        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-400">
-          ℹ️ This will create a Safe transaction that calls <code className="bg-black/30 px-1 rounded">execute()</code> on your 
-          Delegator Module for each selected asset, transferring them back to your Safe.
-          All Safe signers must approve.
-        </div>
-      )}
-
-      {/* Error */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400">
-          ❌ {error}
+        <div className="mt-4 rounded-xl px-3 py-2 text-sm text-danger flex items-center gap-2" style={{ background: 'rgba(251,113,133,.10)', boxShadow: 'inset 0 0 0 1px rgba(251,113,133,.30)' }}>
+          <IconAlert size={15} /> {error}
         </div>
       )}
-
-      {/* Success */}
       {txHash && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-xs text-green-400">
-          ✅ Transaction submitted! Safe TX hash: <span className="font-mono">{txHash.slice(0, 10)}...</span>
+        <div className="mt-4 rounded-xl px-3 py-2 text-sm flex items-center gap-2" style={{ background: 'rgba(52,211,153,.08)', boxShadow: 'inset 0 0 0 1px rgba(52,211,153,.22)', color: '#34D399' }}>
+          <IconCheck size={15} /> Transaction submitted · <Mono className="text-xs">{short(txHash)}</Mono>
         </div>
       )}
 
-      {/* Transfer Button */}
-      <button
-        onClick={handleTransfer}
-        disabled={sending || selectedAssets.size === 0}
-        className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold px-6 py-3 rounded-lg transition-colors"
-      >
-        {sending
-          ? 'Submitting Transaction...'
-          : selectedAssets.size === 0
-          ? 'Select assets to withdraw'
-          : `Withdraw ${selectedAssets.size} asset${selectedAssets.size > 1 ? 's' : ''} to Safe`}
-      </button>
+      <div className="mt-5">
+        <Btn kind="primary" onClick={handleTransfer} disabled={sending || selectedAssets.size === 0} className="w-full">
+          {sending ? 'Submitting…' : selectedAssets.size === 0 ? 'Select assets to withdraw' : `Withdraw ${selectedAssets.size} asset${selectedAssets.size > 1 ? 's' : ''} to Safe`}
+        </Btn>
+        {selectedAssets.size > 0 && <p className="text-xs text-faint text-center mt-2">Calls execute() on the module per asset. All Safe signers approve.</p>}
+      </div>
     </div>
   )
 }
