@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSafeAppsSDK } from '@safe-global/safe-apps-react-sdk'
 import { createPublicClient, http, isAddress, parseUnits, type Address, type Hex } from 'viem'
 import { baseSepolia, base, sepolia } from 'viem/chains'
@@ -19,7 +19,6 @@ import {
 import { periodToSeconds, periodLabel, type PeriodType } from '../lib/enforcers'
 import { getEnvironment } from '../lib/environment'
 import { saveDelegation, type StoredDelegation } from '../lib/storage'
-import { getCapabilities, relayerUrlForChain, type ChainCapabilities } from '../lib/relayer1shot'
 import { Card, Btn, GaslessButton, USDC, Mono, CopyChip, Payee, StatusBadge } from '../ui/components'
 import { IconCube, IconLock, IconCheck, IconExt, IconHash, IconCal } from '../ui/icons'
 
@@ -81,22 +80,6 @@ export default function CreateDelegation() {
   const [pinnedCid, setPinnedCid] = useState<string | null>(null)
   const [signed, setSigned] = useState<StoredDelegation | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [caps, setCaps] = useState<ChainCapabilities | null>(null)
-  const [capsError, setCapsError] = useState<string | null>(null)
-
-  // The delegate is always the 1Shot relayer so every charge is gasless. The
-  // user never sees it — they only choose where the funds are paid (recipient).
-  useEffect(() => {
-    let cancelled = false
-    setCaps(null)
-    setCapsError(null)
-    getCapabilities(relayerUrlForChain(safe.chainId), safe.chainId)
-      .then((c) => !cancelled && setCaps(c))
-      .catch((e: unknown) => !cancelled && setCapsError(e instanceof Error ? e.message : 'Relayer unavailable'))
-    return () => {
-      cancelled = true
-    }
-  }, [safe.chainId])
 
   const defaultUsdc = USDC_BY_CHAIN[safe.chainId]
   const tokenAddress = useCustomToken ? customToken : defaultUsdc
@@ -107,15 +90,15 @@ export default function CreateDelegation() {
   const recipientValid = isAddress(recipient)
   const tokenValid = !!tokenAddress && isAddress(tokenAddress)
   const expiryValid = !expiryEnabled || !!expiryDate
-  const canSign = amountValid && recipientValid && tokenValid && expiryValid && !!caps && !signing
+  const canSign = amountValid && recipientValid && tokenValid && expiryValid && !signing
 
   // Live agreement preview — recomputed as the form changes, so the contract
   // hash the subscriber commits to is visible before signing.
   const preview = useMemo<AgreementDocument | null>(() => {
-    if (!amountValid || !tokenValid || !recipientValid || !caps) return null
+    if (!amountValid || !tokenValid || !recipientValid) return null
     try {
       const terms = buildTerms({
-        organization: { name: payeeName || 'Organization', recipient: recipient as Address, delegate: caps.targetAddress },
+        organization: { name: payeeName || 'Organization', recipient: recipient as Address, delegate: recipient as Address },
         subscriber: { label: 'Safe', account: safe.safeAddress as Address },
         token: { address: tokenAddress as Address, symbol: tokenSymbol, decimals: tokenDecimals },
         amountPerPeriod: amount,
@@ -126,7 +109,7 @@ export default function CreateDelegation() {
     } catch {
       return null
     }
-  }, [amount, amountValid, tokenValid, recipientValid, caps, tokenAddress, tokenDecimals, tokenSymbol, payeeName, recipient, period, expiryEnabled, expiryDate, safe.chainId, safe.safeAddress])
+  }, [amount, amountValid, tokenValid, recipientValid, tokenAddress, tokenDecimals, tokenSymbol, payeeName, recipient, period, expiryEnabled, expiryDate, safe.chainId, safe.safeAddress])
 
   async function handleSign() {
     setSigning(true)
@@ -134,8 +117,9 @@ export default function CreateDelegation() {
     setPinnedCid(null)
     setError(null)
     try {
-      if (!caps) throw new Error('Relayer capabilities not loaded')
-      const delegate = caps.targetAddress
+      // Testing without 1Shot: the delegate is the address you enter (direct redeem),
+      // not the relayer. Revert this block to `caps.targetAddress` to restore gasless.
+      const delegate = recipient as Address
       const chain = chains[safe.chainId]
       if (!chain) throw new Error(`Unsupported chain: ${safe.chainId}`)
       const client = createPublicClient({ chain, transport: http() })
@@ -302,10 +286,9 @@ export default function CreateDelegation() {
             <input type="text" placeholder="Acme Inc." value={payeeName} onChange={(e) => setPayeeName(e.target.value)} />
           </Field>
 
-          <Field label="Payee address" hint="Where the funds are paid each period. Charges are settled gaslessly by the 1Shot relayer.">
+          <Field label="Payee address" hint="The account allowed to charge (the delegate) and where funds are paid. Direct redeem — no relayer.">
             <input type="text" placeholder="0x…" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
             {recipient && !recipientValid && <p className="text-xs text-danger mt-1">Invalid address</p>}
-            {capsError && <p className="text-xs text-pending mt-1">Relayer: {capsError}</p>}
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
