@@ -20,7 +20,11 @@ const inSafeIframe = window.self !== window.top
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {isStandalone ? (
-      <StandaloneRedeem />
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <StandaloneRedeem />
+        </QueryClientProvider>
+      </WagmiProvider>
     ) : !inSafeIframe ? (
       <Landing />
     ) : (
