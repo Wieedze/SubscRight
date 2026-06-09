@@ -4,6 +4,7 @@ import { IconBolt, IconCheck, IconCopy } from './icons'
 
 export type Status = 'active' | 'pending' | 'revoked'
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared design tokens, not a route module
 export const STATUS: Record<Status, { label: string; color: string; dot: string; soft: string; line: string }> = {
   active: { label: 'Active', color: '#34D399', dot: '#34D399', soft: 'rgba(52,211,153,.12)', line: 'rgba(52,211,153,.30)' },
   pending: { label: 'Pending', color: '#FBBF24', dot: '#FBBF24', soft: 'rgba(251,191,36,.12)', line: 'rgba(251,191,36,.30)' },
