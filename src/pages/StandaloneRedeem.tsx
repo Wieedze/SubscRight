@@ -64,6 +64,7 @@ export default function StandaloneRedeem() {
       if (!parsed) throw new Error('No subscription found in JSON')
       setSub(parsed)
       setAmount(parsed.meta.amount ?? '')
+      setRecipient(parsed.meta.recipient ?? '')
       if (parsed.meta.chainId && CHAINS.some((c) => c.id === parsed.meta.chainId)) setChainId(parsed.meta.chainId)
     } catch (err) {
       setSub(null)
@@ -207,7 +208,7 @@ export default function StandaloneRedeem() {
             </button>
             <Card className="p-6">
               <div className="flex items-start justify-between gap-4">
-                <Payee logo={sub.delegation.delegate.slice(2, 4).toUpperCase()} tint={tintFor(sub.delegation.delegate)} name={sub.meta.label} addr={short(sub.delegation.delegate)} />
+                <Payee logo={(sub.meta.recipient ?? sub.delegation.delegate).slice(2, 4).toUpperCase()} tint={tintFor(sub.meta.recipient ?? sub.delegation.delegate)} name={sub.meta.label} addr={short(sub.meta.recipient ?? sub.delegation.delegate)} />
                 <StatusBadge status={sub.meta.status === 'revoked' ? 'revoked' : 'active'} size="sm" />
               </div>
 

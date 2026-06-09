@@ -91,13 +91,14 @@ export default function Delegations() {
       <div className="space-y-3">
         {delegations.map((d) => {
           const status = statusOf(d.meta.status)
+          const payeeAddr = d.meta.recipient ?? d.delegation.delegate
           const httpUri = d.meta.agreement && !d.meta.agreement.uri.startsWith('ipfs://local-') ? ipfsToHttp(d.meta.agreement.uri) : undefined
           const isBusy = revoking === d.meta.delegationHash
           return (
             <Card key={d.meta.delegationHash} className={`p-5 relative ${status === 'revoked' ? 'opacity-70' : ''}`}>
               <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full" style={{ background: status === 'active' ? '#34D399' : status === 'pending' ? '#FBBF24' : '#FB7185' }} />
               <div className="flex items-start justify-between gap-4">
-                <Payee logo={d.delegation.delegate.slice(2, 4).toUpperCase()} tint={tintFor(d.delegation.delegate)} name={d.meta.label} addr={short(d.delegation.delegate)} />
+                <Payee logo={payeeAddr.slice(2, 4).toUpperCase()} tint={tintFor(payeeAddr)} name={d.meta.label} addr={short(payeeAddr)} />
                 <div className="flex items-center gap-3 shrink-0">
                   {d.meta.amount && (
                     <div className="text-right">

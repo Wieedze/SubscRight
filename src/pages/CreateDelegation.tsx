@@ -381,6 +381,7 @@ export default function CreateDelegation() {
             <PreviewRow label={<span className="flex items-center gap-1"><IconLock size={12} /> On-chain cap</span>}>
               <span className="font-mono text-ink">{amount} {tokenSymbol}</span>
               <span className="text-faint text-[11px] block">resets every {period.replace('ly', '')} period</span>
+              <span className="text-faint text-[11px] block mt-1">Only token, amount and period are enforced on-chain. The payee address is set at charge time, not enforced by the caveat.</span>
             </PreviewRow>
             {expiryEnabled && expiryDate && (
               <PreviewRow label="Ends"><span className="text-ink text-xs">{new Date(expiryDate).toLocaleString()}</span></PreviewRow>

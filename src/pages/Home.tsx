@@ -30,13 +30,14 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 function SubCard({ d, onOpen }: { d: StoredDelegation; onOpen: () => void }) {
   const status = statusOf(d.meta.status)
-  const { tint, logo } = tintFor(d.delegation.delegate)
+  const payeeAddr = d.meta.recipient ?? d.delegation.delegate
+  const { tint, logo } = tintFor(payeeAddr)
   const dim = status === 'revoked'
   return (
     <Card hover onClick={onOpen} className={`p-5 cursor-pointer relative ${dim ? 'opacity-70' : ''}`}>
       <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full" style={{ background: status === 'active' ? '#34D399' : status === 'pending' ? '#FBBF24' : '#FB7185' }} />
       <div className="flex items-start justify-between gap-3">
-        <Payee logo={logo} tint={tint} name={d.meta.label} addr={short(d.delegation.delegate)} />
+        <Payee logo={logo} tint={tint} name={d.meta.label} addr={short(payeeAddr)} />
         <StatusBadge status={status} size="sm" />
       </div>
       <div className="mt-5 flex items-end gap-2">

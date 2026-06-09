@@ -164,7 +164,7 @@ export default function Charge() {
 
         <Card className="p-6">
           <div className="flex items-start justify-between gap-4">
-            <Payee logo={selected.delegation.delegate.slice(2, 4).toUpperCase()} tint={tintFor(selected.delegation.delegate)} name={selected.meta.label} addr={short(selected.delegation.delegate)} />
+            <Payee logo={(selected.meta.recipient ?? selected.delegation.delegate).slice(2, 4).toUpperCase()} tint={tintFor(selected.meta.recipient ?? selected.delegation.delegate)} name={selected.meta.label} addr={short(selected.meta.recipient ?? selected.delegation.delegate)} />
             <StatusBadge status="active" size="sm" />
           </div>
 
@@ -236,9 +236,10 @@ export default function Charge() {
         <div className="space-y-3 mt-5">
           {subs.map((d) => {
             const ok = eligible(d)
+            const payeeAddr = d.meta.recipient ?? d.delegation.delegate
             return (
               <Card key={d.meta.delegationHash} hover onClick={() => pick(d)} className="p-5 cursor-pointer flex items-center justify-between gap-4">
-                <Payee logo={d.delegation.delegate.slice(2, 4).toUpperCase()} tint={tintFor(d.delegation.delegate)} name={d.meta.label} addr={short(d.delegation.delegate)} />
+                <Payee logo={payeeAddr.slice(2, 4).toUpperCase()} tint={tintFor(payeeAddr)} name={d.meta.label} addr={short(payeeAddr)} />
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="text-right">
                     <div className="font-mono font-bold text-ink tnum leading-none">{d.meta.amount} <span className="text-dim text-xs font-semibold">{d.meta.tokenAddress ? 'USDC' : ''}</span></div>
