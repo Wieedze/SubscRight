@@ -45,6 +45,41 @@ body {
   background-attachment: fixed;
   color: #eaeef6;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Ambient aurora — two soft blue/cyan lights drifting very slowly behind the
+   content. The frosted .glass panels pick up the moving colour, which is what
+   sells the "live glass" look. Kept faint (subtle/classe) and motion-gated. */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.12;
+  will-change: transform;
+}
+body::before {
+  width: 70vw; height: 70vw; left: -12vw; top: -22vh;
+  background: radial-gradient(closest-side, rgba(59, 130, 246, 0.9), transparent 70%);
+}
+body::after {
+  width: 60vw; height: 60vw; right: -12vw; bottom: -22vh;
+  background: radial-gradient(closest-side, rgba(34, 211, 238, 0.85), transparent 70%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  body::before { animation: aurora-a 40s ease-in-out infinite alternate; }
+  body::after  { animation: aurora-b 52s ease-in-out infinite alternate; }
+}
+@keyframes aurora-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(10vw, 7vh, 0) scale(1.12); }
+}
+@keyframes aurora-b {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-8vw, -5vh, 0) scale(1.1); }
 }
 
 .tnum { font-variant-numeric: tabular-nums; }
@@ -56,7 +91,10 @@ body {
   background: rgba(19, 26, 42, 0.55);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(34, 211, 238, 0.05),
+    0 0 22px -14px rgba(34, 211, 238, 0.18);
 }
 .glass-soft {
   background: rgba(26, 34, 54, 0.4);
@@ -67,8 +105,21 @@ body {
   background: rgba(14, 19, 32, 0.62);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(34, 211, 238, 0.06),
+    0 0 28px -16px rgba(34, 211, 238, 0.2);
 }
+
+/* Opt-in neon helpers (subtle). Apply to hero cards / the wordmark. */
+.glow-hover { transition: box-shadow 0.25s ease, transform 0.2s ease; }
+.glow-hover:hover {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(34, 211, 238, 0.12),
+    0 0 26px -8px rgba(34, 211, 238, 0.22);
+}
+.text-glow { text-shadow: 0 0 16px rgba(34, 211, 238, 0.25); }
 
 @keyframes og-token-drop {
   0% { transform: translateY(-4px); opacity: 0; }
@@ -112,9 +163,41 @@ input, textarea, select {
 }
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent-soft), 0 0 18px -6px var(--accent);
 }
 input::placeholder, textarea::placeholder { color: #646e86; }
+
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #2c3650;
+  background: rgba(26, 34, 54, 0.6);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+}
+input[type="checkbox"]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  transform: scale(0);
+  transition: transform 0.12s ease;
+  background: var(--accent);
+}
+input[type="checkbox"]:checked { border-color: var(--accent); }
+input[type="checkbox"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft); }
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
 
 @keyframes spark { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @keyframes sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(220%); } }

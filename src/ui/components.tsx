@@ -37,7 +37,7 @@ export const Logo = ({ size = 26 }: { size?: number }) => (
     </div>
     <div className="leading-none">
       <div className="font-extrabold tracking-tight text-ink" style={{ fontSize: size * 0.7 }}>
-        Our<span style={{ color: 'var(--accent)' }}>Glass</span>
+        Our<span className="text-glow" style={{ color: 'var(--accent)' }}>Glass</span>
       </div>
     </div>
   </div>
@@ -143,7 +143,7 @@ export function GaslessButton({
 }
 
 export const Card = ({ className = '', hover = false, children, ...p }: { className?: string; hover?: boolean; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={`rounded-2xl glass ring-1 ring-line shadow-card ${hover ? 'transition-all duration-200 hover:ring-line2 hover:-translate-y-0.5' : ''} ${className}`} {...p}>
+  <div className={`rounded-2xl glass ring-1 ring-line shadow-card ${hover ? 'glow-hover duration-200 hover:ring-line2 hover:-translate-y-0.5' : ''} ${className}`} {...p}>
     {children}
   </div>
 )
