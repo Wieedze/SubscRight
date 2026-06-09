@@ -27,6 +27,13 @@ import {
   buildDelegationTypedData,
   type DelegationStruct,
 } from '../lib/delegations'
+import {
+  relayerUrlForChain,
+  getCapabilities,
+  chargeBundleViaRelayer,
+  pollRelayerUntilDone,
+  toRelayerJson,
+} from '../lib/relayer1shot'
 
 // DelegationMetaSwapAdapter ABI (only what we need)
 const SWAP_ADAPTER_ABI = [
@@ -539,6 +546,70 @@ export default function StandaloneRedeem() {
     }
   }
 
+  // Gasless redeem via the 1Shot relayer (paid in the token, no ETH). Requires the
+  // delegation to have been created with delegate = the 1Shot targetAddress.
+  async function handleGaslessRedemption() {
+    if (!parsedDelegation || !publicClient) return
+    if (parsedDelegation.meta.scopeType !== 'erc20SpendingLimit') {
+      setError('Gasless redeem (1Shot) supports ERC-20 subscriptions only.')
+      return
+    }
+    if (!form.amount || !isAddress(form.recipient)) {
+      setError('Enter an amount and a valid recipient.')
+      return
+    }
+    setExecuting(true)
+    setError(null)
+    try {
+      const relayerUrl = relayerUrlForChain(chainId)
+      const caps = await getCapabilities(relayerUrl, chainId)
+      if (parsedDelegation.delegation.delegate.toLowerCase() !== caps.targetAddress.toLowerCase()) {
+        throw new Error(
+          `For gasless redeem, the delegation's delegate must be the 1Shot targetAddress (${caps.targetAddress}). Recreate the subscription with that address as the delegate.`,
+        )
+      }
+      const tokenAddress = parsedDelegation.meta.tokenAddress
+      if (!tokenAddress) throw new Error('Token address not found in delegation')
+      let decimals = 18
+      try {
+        decimals = await publicClient.readContract({ address: tokenAddress, abi: erc20Abi, functionName: 'decimals' })
+      } catch {
+        // default
+      }
+      const delegation = {
+        ...parsedDelegation.delegation,
+        caveats: parsedDelegation.delegation.caveats.map((c) => ({ ...c, args: '0x' as Hex })),
+      }
+      const taskId = await chargeBundleViaRelayer({
+        relayerUrl,
+        chainId,
+        capabilities: caps,
+        permissionContext: [toRelayerJson(delegation)],
+        token: { address: tokenAddress, decimals },
+        workAmount: parseUnits(form.amount, decimals),
+        recipient: form.recipient as Address,
+        client: publicClient,
+      })
+      // The relayer's testnet status API can lag — tolerate a poll timeout.
+      const status = await pollRelayerUntilDone(relayerUrl, taskId, { timeoutMs: 90_000 }).catch(
+        (e: unknown) => {
+          if (e instanceof Error && /Timeout/.test(e.message)) return null
+          throw e
+        },
+      )
+      if (status && (status.status === 400 || status.status === 500)) {
+        throw new Error(`Relayer rejected the task: ${status.message ?? ''}`)
+      }
+      setTxHash(status?.receipt?.transactionHash ?? status?.hash ?? taskId)
+      setExecuted(true)
+    } catch (err: unknown) {
+      console.error('Gasless redemption failed:', err)
+      setError(err instanceof Error ? err.message : 'Gasless redeem failed')
+    } finally {
+      setExecuting(false)
+    }
+  }
+
   function resetForm() {
     setForm({ amount: '', recipient: '', delegationJson: '' })
     setSwapForm({ destinationToken: '', sourceAmount: '' })
@@ -993,6 +1064,17 @@ export default function StandaloneRedeem() {
                 >
                   {executing ? 'Executing...' : isSwapIntent ? 'Execute Swap' : isCustom ? 'Execute Action' : 'Execute Redemption'}
                 </button>
+
+                {!isSwapIntent && !isCustom && parsedDelegation?.meta.scopeType === 'erc20SpendingLimit' && (
+                  <button
+                    onClick={handleGaslessRedemption}
+                    disabled={!canExecute() || executing}
+                    title="Redeem via the 1Shot relayer — paid in the token, no ETH. Needs delegate = 1Shot targetAddress."
+                    className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+                  >
+                    {executing ? 'Charging…' : '⚡ Redeem gasless (1Shot)'}
+                  </button>
+                )}
               </div>
             )}
           </>
