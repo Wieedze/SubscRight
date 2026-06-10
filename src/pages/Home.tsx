@@ -6,6 +6,7 @@ import { DeleGatorModuleFactoryABI, SafeABI } from '../config/abis'
 import { getAddresses } from '../config/addresses'
 import { buildModuleInstallTxs, DEFAULT_SALT } from '../lib/module'
 import { getDelegations, type StoredDelegation } from '../lib/storage'
+import { periodToSeconds, isPeriodType } from '../lib/enforcers'
 import { SubscriptionDetail } from './SubscriptionDetail'
 import { Card, Btn, StatusBadge, Payee, type Status } from '../ui/components'
 import { IconChip, IconCheck, IconPlus, IconRepeat, IconLock, IconCube, IconExt, IconAlert, IconArrowR } from '../ui/icons'
@@ -16,7 +17,7 @@ const chains: Record<number, typeof baseSepolia | typeof base | typeof sepolia> 
   8453: base,
 }
 
-type Page = 'home' | 'create' | 'import' | 'redeem' | 'withdraw'
+type Page = 'home' | 'create' | 'import' | 'redeem'
 
 function tintFor(addr: string): { tint: string; logo: string } {
   const palette = ['#3B82F6', '#22D3EE', '#8B5CF6', '#34D399', '#FB7185', '#FBBF24']
@@ -148,7 +149,14 @@ export default function Home({ onNavigate }: { onNavigate: (page: Page) => void 
   }
 
   const active = subs.filter((s) => s.meta.status === 'signed')
-  const committed = active.reduce((a, s) => a + (s.meta.period === 'month' ? parseFloat((s.meta.amount ?? '0').replace(/,/g, '')) : 0), 0)
+  // Monthly run-rate: normalise each active subscription's amount to a per-month
+  // figure from its period, so a daily/weekly/minutely cap still contributes.
+  const SECONDS_PER_MONTH = Number(periodToSeconds('monthly'))
+  const committed = active.reduce((sum, s) => {
+    const amount = parseFloat((s.meta.amount ?? '0').replace(/,/g, ''))
+    if (!Number.isFinite(amount) || !isPeriodType(s.meta.period)) return sum
+    return sum + amount * (SECONDS_PER_MONTH / Number(periodToSeconds(s.meta.period)))
+  }, 0)
 
   return (
     <div className="rise">

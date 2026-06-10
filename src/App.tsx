@@ -3,17 +3,15 @@ import Home from './pages/Home'
 import CreateDelegation from './pages/CreateDelegation'
 import ImportDelegation from './pages/ImportDelegation'
 import Charge from './pages/Charge'
-import ModuleTransfer from './pages/ModuleTransfer'
 import { Logo } from './ui/components'
-import { IconGrid, IconPlus, IconBolt, IconWallet, IconLink } from './ui/icons'
+import { IconGrid, IconPlus, IconBolt, IconLink } from './ui/icons'
 
-type Page = 'home' | 'create' | 'import' | 'redeem' | 'withdraw'
+type Page = 'home' | 'create' | 'import' | 'redeem'
 
 const NAV: { key: Page; label: string; icon: ComponentType<{ size?: number }> }[] = [
   { key: 'home', label: 'Overview', icon: IconGrid },
   { key: 'create', label: 'Subscribe', icon: IconPlus },
   { key: 'redeem', label: 'Charge', icon: IconBolt },
-  { key: 'withdraw', label: 'Withdraw', icon: IconWallet },
   { key: 'import', label: 'Import', icon: IconLink },
 ]
 
@@ -60,7 +58,6 @@ function AppInner() {
           {page === 'create' && <CreateDelegation />}
           {page === 'import' && <ImportDelegation />}
           {page === 'redeem' && <Charge />}
-          {page === 'withdraw' && <ModuleTransfer />}
         </main>
       </div>
     </div>

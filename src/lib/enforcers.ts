@@ -1,5 +1,11 @@
 export type PeriodType = 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly'
 
+const PERIOD_TYPES: PeriodType[] = ['minutely', 'hourly', 'daily', 'weekly', 'monthly']
+
+export function isPeriodType(value: unknown): value is PeriodType {
+  return typeof value === 'string' && (PERIOD_TYPES as string[]).includes(value)
+}
+
 export function periodToSeconds(period: PeriodType): bigint {
   switch (period) {
     case 'minutely':
