@@ -1,173 +1,157 @@
-# 🐊 Gator Safe App
+# OurGlass
 
-A Safe App for creating and managing ERC-7710 delegations using the [MetaMask Delegation Framework](https://github.com/MetaMask/delegation-framework) and [Smart Accounts Kit](https://docs.metamask.io/smart-accounts/).
+**Recurring on-chain payment agreements for Safe treasuries. Sign once, get charged every period — capped on-chain, documented on IPFS, revocable at any time.**
 
-**Live:** [gator-safe-app.vercel.app](https://gator-safe-app.vercel.app/)
+**Live:** [ourglass.intuition.box](https://ourglass.intuition.box/) — add it as a custom Safe App in your Safe.
 
-## What is Gator?
+## Why
 
-Gator lets Safe multisig owners create scoped, onchain-enforceable permissions (delegations) that allow delegates — humans, agents, or applications — to act on behalf of the Safe within strict boundaries. Every delegation is bounded by caveat enforcers: onchain rules verified at execution time.
+DAOs run on recurring obligations: service retainers paid to other DAOs, contributor payroll, infrastructure subscriptions, grant disbursements. Today each payment cycle means another proposal, another signature round, another chance for a payment to land late or not at all. Multisig coordination is the bottleneck, and the treasury team carries it every month.
 
-## Features
+OurGlass removes the cycle. The paying Safe signs **one** agreement. From then on, the payee charges itself each period — within a hard cap enforced by an on-chain rule, never above the agreed amount, never twice in the same period. The subscriber can revoke unilaterally at any time. No escrow, no streaming contract holding funds, no relayer in the middle: tokens stay in the treasury until the moment they are charged.
 
-### 🔐 Permission Types
+## What you can run on it
 
-**💰 Spending Limits**
-- ETH or ERC-20 spending limits with configurable periods (daily, weekly, monthly)
-- Delegates can transfer tokens up to the allowed amount per period
-- Uses `ERC20PeriodTransferEnforcer` and `NativeTokenPeriodTransferEnforcer`
+- **DAO-to-DAO service agreements** — a service DAO charges its client Safe a fixed retainer per month, against terms both parties can read on IPFS.
+- **Payroll** — a contributor (EOA or Safe) pulls their salary each period without asking signers to queue a transaction.
+- **Subscriptions** — recurring USDC (or any ERC-20) payments to a provider, capped per period.
 
-**🔄 Transfer Intents**
-- Conditional transfers: "I will let you transfer X out, if and only if I receive Y in return"
-- Uses `ERC20MultiOperationIncreaseBalanceEnforcer` to verify the Safe receives the expected tokens
-- Supports ETH and ERC-20 tokens in both directions
+In every case the payer's obligation is bounded by the on-chain cap, and the payment stops the moment the delegation is revoked.
 
-**💱 Swap Intents**
-- Allow a delegate to swap up to X of your tokens per period into any token via MetaSwap
-- Uses the [DelegationMetaSwapAdapter](https://github.com/MetaMask/delegation-framework/blob/main/src/helpers/DelegationMetaSwapAdapter.sol) for secure swap execution
-- `RedeemerEnforcer` ensures only the MetaSwap adapter can redeem the delegation
-- `ArgsEqualityCheckEnforcer` controls token whitelist behavior
-- `ERC20PeriodTransferEnforcer` limits how much can be swapped per period
+## How it works
 
-### 📄 Pages
+OurGlass is a [Safe App](https://docs.safe.global/apps-sdk-overview) built on the [MetaMask Delegation Framework](https://github.com/MetaMask/delegation-framework) (ERC-7710) and the [Smart Accounts Kit](https://docs.metamask.io/smart-accounts/).
 
-| Page | Route | Description |
-|------|-------|-------------|
-| **Home** | `/` | Dashboard showing created delegations |
-| **Create Delegation** | Step-by-step wizard for granting permissions |
-| **View Delegations** | Browse, export, and manage active delegations |
-| **Redeem Delegation** | Redeem delegations from within the Safe App |
-| **Standalone Redeem** | `/redeem` | External page for EOA/embedded wallet users to redeem delegations |
-| **Import Delegation** | Import delegation JSON files |
+1. **Install the DeleGator module (once).** A minimal module is deployed deterministically for your Safe and enabled on it. The module acts as the delegator: it lets the Delegation Framework execute transfers from the Safe within the limits you sign — and nothing else.
+2. **Write the agreement.** You set the payee, token, amount, period (per minute / day / week / month — the per-minute option is there for live demos) and an optional end date. OurGlass builds a human-readable agreement document and pins it to IPFS.
+3. **Sign once.** The Safe signs an EIP-712 delegation (threshold signatures apply). The delegation's salt is `keccak256(terms)` — the signature is cryptographically bound to the exact pinned agreement. Change a comma in the terms and the signature is void.
+4. **Get charged per period.** The payee redeems the delegation through the `DelegationManager`. The `ERC20PeriodTransferEnforcer` caveat enforces the cap on-chain: at most the agreed amount per period, and a second charge within the same period reverts. An optional `TimestampEnforcer` enforces the end date.
+5. **Revoke whenever.** The Safe disables the delegation on-chain (`disableDelegation`, routed through the module). Any later charge attempt reverts with `CannotUseADisabledDelegation`.
 
-### 🔑 Wallet Support
-
-- **Safe Multisig** — Full delegation creation and redemption within the Safe App
-- **MetaMask (Injected)** — Connect via browser extension on the standalone redeem page
-- **MetaMask Embedded Wallet (Web3Auth)** — Social login (Google, email, etc.) on the standalone redeem page — no extension required
-
-## How It Works
-
-### Creating a Delegation (Safe App)
-
-1. **Choose a Delegate** — Enter the address that will receive the permission
-2. **Select Permission Type** — Spending Limit, Transfer Intent, or Swap Intent
-3. **Configure Scope** — Set token, amount, period, and any conditions
-4. **Review & Sign** — EIP-712 signature from the Safe (requires threshold signers)
-5. **Export** — Download the signed delegation as JSON to share with the delegate
-
-### Redeeming a Delegation
-
-**From the Safe App (Redeem tab):**
-- Select a delegation and execute the permitted action (transfer, swap)
-
-**From the Standalone Page (`/redeem`):**
-- Load a delegation JSON file or paste it
-- Connect via MetaMask or embedded wallet
-- Execute: spending limits trigger direct transfers, swap intents fetch MetaSwap quotes and call `swapByDelegation`
-
-### Swap Intent Flow
-
-1. Safe owner creates a delegation with swap scope (source token + period limit)
-2. Delegate receives the signed delegation JSON
-3. On the redeem page, delegate:
-   - Loads the delegation
-   - Enters source amount and selects destination token
-   - Fetches quotes from the MetaSwap API
-   - Signs a redelegation to the DelegationMetaSwapAdapter
-   - Calls `swapByDelegation` with the API data + delegation chain
-4. The adapter redeems the delegation, pulls tokens from the Safe, executes the swap, and returns output tokens to the Safe
-
-## Architecture
+The subscriber never sends a transaction to be charged — the signature is the standing authorization. The payee pays the gas for each charge, as the party collecting the payment.
 
 ```
-┌─────────────────────────────────────┐
-│           Safe Multisig             │
-│  (Delegator — owns the funds)       │
-└──────────────┬──────────────────────┘
-               │ EIP-712 Signed Delegation
-               │ (with caveat enforcers)
-               ▼
-┌─────────────────────────────────────┐
-│         Delegate (EOA/Agent)        │
-│  (Receives scoped permission)       │
-└──────────────┬──────────────────────┘
-               │ Redelegation (for swaps)
-               ▼
-┌─────────────────────────────────────┐
-│   DelegationMetaSwapAdapter         │
-│  (Executes swap via MetaSwap)       │
-└──────────────┬──────────────────────┘
-               │ redeemDelegations()
-               ▼
-┌─────────────────────────────────────┐
-│       DelegationManager             │
-│  (Verifies chain + enforcers)       │
-└─────────────────────────────────────┘
+┌─────────────────────────────┐
+│      Subscriber Safe        │  holds the funds
+│  (DAO treasury, multisig)   │
+└─────────────┬───────────────┘
+              │ enables (once)
+              ▼
+┌─────────────────────────────┐      EIP-712 delegation
+│      DeleGator module       │  ◄── salt = keccak256(terms)
+│   (delegator for the Safe)  │      terms pinned to IPFS
+└─────────────┬───────────────┘
+              │ bounded execution
+              ▼
+┌─────────────────────────────┐
+│     DelegationManager       │  verifies signature + caveats
+│  + ERC20PeriodTransfer      │  cap per period, no double charge
+│    Enforcer (on-chain)      │
+└─────────────┬───────────────┘
+              │ ERC-20 transfer
+              ▼
+┌─────────────────────────────┐
+│       Payee (delegate)      │  charges itself each period
+│   service DAO, contributor  │
+└─────────────────────────────┘
 ```
 
-## Caveat Enforcers Used
+## Trust model
 
-| Enforcer | Purpose |
-|----------|---------|
-| `ERC20PeriodTransferEnforcer` | Limits ERC-20 spending per time period |
-| `NativeTokenPeriodTransferEnforcer` | Limits ETH spending per time period |
-| `ERC20MultiOperationIncreaseBalanceEnforcer` | Verifies token balance increases (transfer intents) |
-| `ArgsEqualityCheckEnforcer` | Controls token whitelist for swap intents |
-| `RedeemerEnforcer` | Restricts who can redeem (e.g., only MetaSwap adapter) |
+| Property | Where it is enforced |
+|---|---|
+| Per-period spending cap | On-chain (`ERC20PeriodTransferEnforcer`) |
+| No double charge within a period | On-chain (same enforcer) |
+| Optional end date | On-chain (`TimestampEnforcer`) |
+| Signature bound to the exact agreement text | Cryptographic (delegation salt = `keccak256(terms)`) |
+| Revocation | On-chain (`disableDelegation`) |
+| Replay across chains or terms | Prevented by the EIP-712 domain (chainId + `DelegationManager`) and the unique salt |
+| Agreement document availability | IPFS (pinned via Pinata) |
 
-## Tech Stack
+Funds never leave the Safe in advance. The delegation grants a capability, not a balance.
 
-- **React + TypeScript + Vite**
-- **[@metamask/smart-accounts-kit](https://www.npmjs.com/package/@metamask/smart-accounts-kit)** — Delegation creation, signing, redemption
+## Product surface
+
+| Page | Route | What it does |
+|---|---|---|
+| Overview | `/` (in Safe) | Module status, committed monthly total, your subscriptions at a glance — open one to inspect the pinned IPFS contract or revoke it |
+| Subscribe | in-app tab | Create and sign a new agreement, with a live preview of the contract being signed |
+| Charge | in-app tab | For payee Safes: charge a subscription where this Safe is the delegate |
+| Withdraw | in-app tab | Sweep any assets sitting on the DeleGator module back to the Safe |
+| Import | in-app tab | Import a subscription JSON shared by the counterparty |
+| Charge console | `/redeem` | Standalone page for payees outside Safe — load a subscription JSON, connect a browser wallet (MetaMask), charge on-chain |
+
+Both sides of an agreement are first-class: the paying Safe manages and revokes from inside Safe; the payee charges either from its own Safe or from the standalone console with a plain wallet.
+
+## Supported networks
+
+| Network | Chain ID | DeleGatorModuleFactory |
+|---|---|---|
+| Base Sepolia | 84532 | `0xE64ea779033131583cDE1c8862685051E09C4b78` |
+| Ethereum Sepolia | 11155111 | `0x250435c7D339F03050c847c85f0108f44e876058` |
+| Base | 8453 | `0x0D0421e43057bf850e243EcDA2AD8966C8D5877B` |
+
+The `DelegationManager` (`0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3`) and the caveat enforcers are MetaMask's audited, deterministic Delegation Framework v1.3.0 deployments — the same addresses on every supported chain. The full enforcer list lives in [`src/config/addresses.ts`](src/config/addresses.ts).
+
+## Tech stack
+
+- **React + TypeScript + Vite**, Tailwind CSS v4
+- **[@metamask/smart-accounts-kit](https://www.npmjs.com/package/@metamask/smart-accounts-kit)** — delegation creation, signing, redemption
 - **[@safe-global/safe-apps-react-sdk](https://www.npmjs.com/package/@safe-global/safe-apps-react-sdk)** — Safe App integration
-- **[wagmi](https://wagmi.sh/)** + **[viem](https://viem.sh/)** — Wallet connection and onchain interactions
-- **[@web3auth/modal](https://www.npmjs.com/package/@web3auth/modal)** — Embedded wallet (social login)
-- **[Tailwind CSS](https://tailwindcss.com/)** — Styling
+- **[wagmi](https://wagmi.sh/) + [viem](https://viem.sh/)** — wallet connection and on-chain calls
+- **Pinata** — IPFS pinning of agreement documents
 
-## Getting Started
+Signed agreements are stored client-side (`localStorage`) and exchanged between parties as JSON files. Nothing sensitive ever leaves the browser.
+
+## Getting started
 
 ```bash
-# Clone
-git clone https://github.com/osobot-ai/gator-safe-app.git
-cd gator-safe-app
+git clone https://github.com/intuition-box/OurGlass.git
+cd OurGlass
 
-# Install
-npm install
+npm install      # or: bun install
 
-# Set environment variables
 cp .env.example .env
-# Edit .env with your VITE_WEB3AUTH_CLIENT_ID
+# fill in the variables below
 
-# Run
-npm run dev
+npm run dev      # http://localhost:5173
 ```
 
-## Environment Variables
+To use it against a real Safe, open your Safe → Apps → My custom apps → add `http://localhost:5173` (or the live URL).
 
-| Variable | Description |
-|----------|-------------|
-| `VITE_WEB3AUTH_CLIENT_ID` | Web3Auth client ID from the [Embedded Wallets Dashboard](https://dashboard.web3auth.io/) |
+### Environment variables
 
-## Contract Addresses (Base)
+| Variable | Purpose |
+|---|---|
+| `VITE_PINATA_JWT` | Pinata JWT for pinning agreement documents to IPFS. Without it the app falls back to a local offline pin (fine for development). |
 
-| Contract | Address |
-|----------|---------|
-| DelegationManager | `0x0` (from SDK environment) |
-| DelegationMetaSwapAdapter | `0x5e4b49156D23D890e7DC264c378a443C2d22A80E` |
-| ArgsEqualityCheckEnforcer | `0x44B8C6ae3C304213c3e298495e12497Ed3E56E41` |
-| RedeemerEnforcer | `0xE144b0b2618071B4E56f746313528a669c7E65c5` |
-| ERC20PeriodTransferEnforcer | `0x474e3ae7e169e940607cc624da8a15eb120139ab` |
+### Build, test, deploy
 
-## Built By
+```bash
+npm run build      # tsc -b && vite build → dist/
+npm run test:all   # local Anvil fork: deploys the stack and runs the full delegation flow
+```
 
-Built by [Osobot](https://x.com/Osobotai) 🐻 — an AI agent working for [@McOso_](https://x.com/McOso_) at MetaMask.
+A `Dockerfile` (multi-stage: Bun build → Caddy static serve) and `Caddyfile` are included; the Caddy config sets the CORS headers Safe needs to load the app manifest in its iframe. Pass `VITE_PINATA_JWT` as a build arg — Vite inlines `VITE_*` variables at build time.
 
-⚠️ The smart contracts are all audited, but this app was built by an AI agent — use at your own risk.
+## Provenance
+
+OurGlass is a fork of [gator-safe-app](https://github.com/osobot-ai/gator-safe-app) by [Osobot](https://www.osoknows.com/), an AI agent building on the MetaMask Delegation Framework. The upstream project is a general-purpose delegation manager (spending limits, transfer intents, swap intents). This fork refocuses it into a recurring-payment product for DAO treasuries:
+
+- A subscription model — payee, amount, period, end date — replacing the generic delegation wizard
+- Human-readable agreements pinned to IPFS and bound to the signature via the delegation salt
+- A charge flow for payees (in-Safe and standalone), redeeming directly on-chain through the `DelegationManager`
+- Revocation routed correctly through the DeleGator module
+- Ethereum Sepolia support alongside Base / Base Sepolia
+- A full redesign (glassmorphism UI) and the OurGlass branding
+
+## Status
+
+The Delegation Framework contracts (DelegationManager, enforcers) are audited MetaMask deployments. OurGlass itself is under active development and has not been independently audited — use testnets for evaluation and review the code before committing treasury funds.
 
 ## Links
 
-- [ERC-7710 Delegation Framework Docs](https://github.com/MetaMask/delegation-framework)
+- [MetaMask Delegation Framework (ERC-7710)](https://github.com/MetaMask/delegation-framework)
 - [MetaMask Smart Accounts Kit](https://docs.metamask.io/smart-accounts/)
-- [DelegationMetaSwapAdapter](https://github.com/MetaMask/delegation-framework/blob/main/src/helpers/DelegationMetaSwapAdapter.sol)
-- [Delegator Safe Module](https://github.com/osobot-ai/delegator-safe-module)
+- [Safe Apps SDK](https://docs.safe.global/apps-sdk-overview)
+- [Upstream project: osobot-ai/gator-safe-app](https://github.com/osobot-ai/gator-safe-app)
