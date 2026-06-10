@@ -1,6 +1,6 @@
-import { LogoMark } from '../ui/components'
+import { Logo } from '../ui/components'
 
-const REPO_URL = 'https://github.com/Wieedze/SubscRight'
+const REPO_URL = 'https://github.com/intuition-box/OurGlass'
 
 /**
  * Shown when the app is opened top-level (not inside a Safe iframe). The Safe
@@ -37,30 +37,30 @@ export default function Landing() {
       </div>
 
       <nav className="relative z-10 flex items-center justify-between">
-        <LogoMark size={26} />
+        <Logo size={52} />
         <div className="flex items-center gap-7">
-          <a
-            href="https://app.safe.global"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-sm text-[15px] font-medium text-ink transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-base"
-          >
-            Add to your Safe
-          </a>
           <a
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
+            className="rounded-sm text-[15px] font-medium text-ink transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-base"
+          >
+            GitHub
+          </a>
+          <a
+            href="https://app.safe.global"
+            target="_blank"
+            rel="noreferrer"
             className="inline-flex h-[42px] items-center rounded-full bg-[#f5f5f7] px-[22px] text-[15px] font-semibold text-[#111] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-base"
           >
-            Github
+            Add to your Safe
           </a>
         </div>
       </nav>
 
       <div className="relative z-10 mt-16 max-w-[880px]">
         <h1 className="text-[clamp(40px,5.2vw,64px)] font-semibold leading-[1.12] tracking-[-1.5px]">
-          Real-time streaming<br />payments for your<br />platform
+          Recurring payments<br />for DAO treasuries.
         </h1>
 
         <div className="mt-10 flex items-center gap-[18px]">
@@ -69,7 +69,7 @@ export default function Landing() {
             className="group inline-flex items-stretch gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-base"
           >
             <span className="inline-flex h-12 items-center rounded-full bg-[#f5f5f7] px-7 text-base font-semibold text-[#111] transition-opacity group-hover:opacity-90">
-              Start streaming money
+              Claim your payment
             </span>
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#f5f5f7] text-[#111] transition-[border-radius,opacity] duration-200 group-hover:rounded-full group-hover:opacity-90">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -83,10 +83,10 @@ export default function Landing() {
       </div>
 
       <div className="relative z-10 mt-auto flex flex-col gap-3.5 pt-[120px]">
-        <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Sign once</b>the payee charges itself every period</p>
+        <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Sign once</b>remove the monthly signing burden from your signers</p>
         <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Capped on-chain</b>never above the agreed amount, never twice</p>
         <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Non-custodial</b>funds stay in your Safe until the moment of charge</p>
-        <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Documented</b>human-readable agreements pinned to IPFS</p>
+        <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Charged every period</b>by the receiver, no subsequent signers needed</p>
         <p className="text-[17px] text-faint"><b className="mr-1.5 font-semibold text-ink">Revocable</b>cancel any agreement on-chain, at any time</p>
       </div>
     </section>

@@ -11,9 +11,11 @@ export const STATUS: Record<Status, { label: string; color: string; dot: string;
   revoked: { label: 'Revoked', color: '#FB7185', dot: '#FB7185', soft: 'rgba(251,113,133,.12)', line: 'rgba(251,113,133,.28)' },
 }
 
-/** The Ripl mark — a fan of strokes that fades grey → white, the streaming-payments signature. */
+/** The Ripl mark — a fan of strokes that fades grey → white, the streaming-payments signature.
+    The viewBox is padded so the rotated lines and their round caps are never clipped;
+    the svg renders at 1.5× `size` to compensate, keeping the visual mark ≈ `size`. */
 export const LogoMark = ({ size = 26 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden="true" className="block shrink-0">
+  <svg width={Math.round(size * 1.5)} height={Math.round(size * 1.5)} viewBox="-13 -15 126 126" fill="none" aria-hidden="true" className="block shrink-0">
     <g strokeLinecap="round" strokeWidth="9" fill="none">
       <line x1="50" y1="-8" x2="50" y2="108" stroke="#7a7a7a" transform="rotate(45 50 48)" />
       <line x1="50" y1="-8" x2="50" y2="108" stroke="#909090" transform="rotate(30 50 48)" />
@@ -26,13 +28,13 @@ export const LogoMark = ({ size = 26 }: { size?: number }) => (
   </svg>
 )
 
-export const Logo = ({ size = 26, withWordmark = true }: { size?: number; withWordmark?: boolean }) => (
+export const Logo = ({ size = 40, withWordmark = true }: { size?: number; withWordmark?: boolean }) => (
   <div className="flex items-center gap-2.5 select-none">
     <LogoMark size={size} />
     {withWordmark && (
       <div className="leading-none">
-        <div className="font-bold tracking-tight text-ink" style={{ fontSize: size * 0.7 }}>
-          Our<span style={{ color: 'var(--accent)' }}>Glass</span>
+        <div className="font-extrabold tracking-tight text-ink" style={{ fontSize: size * 0.85 }}>
+          Our<span className="text-glow" style={{ color: 'var(--accent)' }}>Glass</span>
         </div>
       </div>
     )}
