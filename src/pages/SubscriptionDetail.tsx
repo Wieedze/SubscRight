@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useSafeAppsSDK } from '@safe-global/safe-apps-react-sdk'
 import { ipfsToHttp } from '../lib/subscriptionTerms'
 import { buildRevokeTxs } from '../lib/revoke'
+import { verifierUrlFor } from '../lib/verifierLink'
 import { updateDelegationStatus, removeDelegation, type StoredDelegation } from '../lib/storage'
 import { Card, Btn, StatusBadge, Payee, Mono, CopyChip, type Status } from '../ui/components'
 import { IconX, IconStop, IconCube, IconExt, IconLock, IconCal } from '../ui/icons'
@@ -185,6 +186,14 @@ export function SubscriptionDetail({
         <div className="mt-5 flex items-center gap-2">
           <Mono className="text-[11px] text-faint mr-auto">{short(d.meta.delegationHash)}</Mono>
           <CopyChip value={JSON.stringify(d, null, 2)} label="Copy JSON" />
+          <Btn
+            kind="secondary"
+            size="sm"
+            icon={<IconExt size={14} />}
+            onClick={() => window.open(verifierUrlFor(d), '_blank', 'noopener,noreferrer')}
+          >
+            Verify externally
+          </Btn>
           {d.meta.status === 'signed' && (
             <Btn kind="danger" size="sm" icon={<IconStop size={14} />} onClick={handleRevoke} disabled={revoking}>
               {revoking ? 'Revoking…' : 'Revoke'}
