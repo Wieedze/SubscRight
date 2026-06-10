@@ -168,7 +168,7 @@ export default function Home({ onNavigate }: { onNavigate: (page: Page) => void 
             <div className="grid place-items-center w-9 h-9 rounded-xl shrink-0 bg-raised text-danger ring-1 ring-line"><IconAlert size={18} /></div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-ink">OurGlass module not installed</div>
-              <p className="text-xs text-dim mt-1 leading-relaxed">Enable the DeleGator (ERC-7710) module on your Safe to start creating gasless subscriptions. One-time setup — all signers approve.</p>
+              <p className="text-xs text-dim mt-1 leading-relaxed">Enable the DeleGator (ERC-7710) module on your Safe to start creating subscriptions. One-time setup — all signers approve.</p>
               {moduleAddress && <p className="text-[11px] text-faint font-mono mt-2 truncate">module: {moduleAddress}</p>}
               <div className="mt-3">
                 <Btn kind="primary" onClick={installModule} disabled={installing}>
@@ -192,7 +192,7 @@ export default function Home({ onNavigate }: { onNavigate: (page: Page) => void 
       <div className="flex items-end justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink">Subscriptions</h1>
-          <p className="text-dim text-sm mt-1">Recurring USDC charges, gasless, capped on-chain.</p>
+          <p className="text-dim text-sm mt-1">Recurring USDC charges, capped on-chain.</p>
         </div>
         <Btn kind="primary" icon={<IconPlus size={18} />} onClick={() => onNavigate('create')}>New subscription</Btn>
       </div>

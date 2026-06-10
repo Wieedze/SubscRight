@@ -51,7 +51,7 @@ function AppInner() {
             <div className="flex items-center gap-2 text-xs font-semibold text-ink">
               <IconBolt size={14} style={{ color: 'var(--accent)' }} /> Sign once.
             </div>
-            <p className="text-[11px] text-dim leading-relaxed mt-1.5">Charged every period. Gasless. Capped on-chain. Revocable.</p>
+            <p className="text-[11px] text-dim leading-relaxed mt-1.5">Charged every period. Capped on-chain. Revocable.</p>
           </div>
         </aside>
 

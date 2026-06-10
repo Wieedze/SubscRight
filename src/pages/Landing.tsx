@@ -13,7 +13,7 @@ export default function Landing() {
         <Logo size={40} />
         <h1 className="mt-6 text-2xl font-extrabold tracking-tight text-ink">Sign once. Charged every period.</h1>
         <p className="mt-2 text-sm text-dim leading-relaxed">
-          OurGlass is a Safe App. Open it inside your Safe to create and manage gasless subscriptions.
+          OurGlass is a Safe App. Open it inside your Safe to create and manage recurring subscriptions.
         </p>
         <a
           href="/redeem"
@@ -23,7 +23,7 @@ export default function Landing() {
           <IconBolt size={16} /> Charge a subscription
           <IconArrowR size={15} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
         </a>
-        <p className="mt-3 text-xs text-faint">Biller console — bill a signed subscription via the 1Shot relayer.</p>
+        <p className="mt-3 text-xs text-faint">Biller console — charge a signed subscription directly on-chain.</p>
       </div>
     </div>
   )

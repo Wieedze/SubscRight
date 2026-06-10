@@ -117,8 +117,7 @@ export default function CreateDelegation() {
     setPinnedCid(null)
     setError(null)
     try {
-      // Testing without 1Shot: the delegate is the address you enter (direct redeem),
-      // not the relayer. Revert this block to `caps.targetAddress` to restore gasless.
+      // The payee is the delegate: it redeems the delegation directly on-chain.
       const delegate = recipient as Address
       const chain = chains[safe.chainId]
       if (!chain) throw new Error(`Unsupported chain: ${safe.chainId}`)
@@ -273,7 +272,7 @@ export default function CreateDelegation() {
       {/* Form */}
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">New subscription</h1>
-        <p className="text-dim text-sm mt-1">Sign once. The biller charges it every period, gasless, capped on-chain.</p>
+        <p className="text-dim text-sm mt-1">Sign once. The biller charges it every period, capped on-chain.</p>
 
         {error && (
           <div className="mt-4 rounded-xl px-3 py-2 text-sm text-danger" style={{ background: 'rgba(251,113,133,.10)', boxShadow: 'inset 0 0 0 1px rgba(251,113,133,.30)' }}>

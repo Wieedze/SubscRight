@@ -30,7 +30,7 @@ export interface StoredDelegation {
     period?: string
     tokenAddress?: Address
     expiryDate?: string
-    // Where the funds are paid (the org). The delegate is the 1Shot relayer.
+    // Where the funds are paid — the payee, who is also the delegate.
     recipient?: Address
     // Custom delegation meta
     targetAddress?: Address
