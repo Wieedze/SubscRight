@@ -8,7 +8,7 @@ import type { StoredDelegation } from './storage'
  * here: OurGlass never renders a "verified" result itself (a compromised front
  * could fake that). Override the base with VITE_VERIFIER_URL.
  */
-const VERIFIER_URL: string = import.meta.env.VITE_VERIFIER_URL ?? 'https://verify.ourglass.intuition.box'
+const VERIFIER_URL: string = import.meta.env.VITE_VERIFIER_URL ?? 'https://verify.ourglass.eth.limo/'
 
 function toBase64Url(text: string): string {
   const bytes = new TextEncoder().encode(text)
