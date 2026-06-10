@@ -34,7 +34,7 @@ export const Logo = ({ size = 40, withWordmark = true }: { size?: number; withWo
     {withWordmark && (
       <div className="leading-none">
         <div className="font-extrabold tracking-tight text-ink" style={{ fontSize: size * 0.85 }}>
-          Our<span className="text-glow" style={{ color: 'var(--accent)' }}>Glass</span>
+          <span className="text-glow" style={{ color: 'var(--accent)' }}>Our</span>Glass
         </div>
       </div>
     )}
