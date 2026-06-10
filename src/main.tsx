@@ -12,14 +12,22 @@ import './index.css'
 
 const queryClient = new QueryClient()
 
+// Workshop slide deck, lazy-loaded so it stays out of the app bundle.
+const Pitch = React.lazy(() => import('./pages/Pitch'))
+
 // The biller charge console lives on /redeem; everything else is the Safe App.
 const isStandalone = window.location.pathname === '/redeem'
+const isPitch = window.location.pathname === '/pitch'
 // The Safe App only works inside the Safe iframe — top-level visitors get a landing.
 const inSafeIframe = window.self !== window.top
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {isStandalone ? (
+    {isPitch ? (
+      <React.Suspense fallback={<div className="min-h-screen bg-base" />}>
+        <Pitch />
+      </React.Suspense>
+    ) : isStandalone ? (
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <StandaloneRedeem />
